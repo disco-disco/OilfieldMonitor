@@ -11,6 +11,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isPIConfigured, setIsPIConfigured] = useState(false);
+  const [currentMode, setCurrentMode] = useState<'development' | 'production'>('development');
 
   // Load wellpad data
   const loadWellPadData = async () => {
@@ -90,9 +91,18 @@ export default function Home() {
       try {
         const response = await fetch('/api/pi-system/config');
         const result = await response.json();
-        setIsPIConfigured(!!result.config?.afServerName);
+        
+        if (result.success && result.config) {
+          setIsPIConfigured(result.config.isPIConfigured);
+          setCurrentMode(result.config.mode || 'development');
+        } else {
+          setIsPIConfigured(false);
+          setCurrentMode('development');
+        }
       } catch (error) {
+        console.error('Error checking PI config:', error);
         setIsPIConfigured(false);
+        setCurrentMode('development');
       }
     };
 
@@ -101,8 +111,23 @@ export default function Home() {
   }, []);
 
   const handlePIConfigured = () => {
-    setIsPIConfigured(true);
     setShowConfig(false);
+    // Reload configuration status
+    const checkPIConfig = async () => {
+      try {
+        const response = await fetch('/api/pi-system/config');
+        const result = await response.json();
+        
+        if (result.success && result.config) {
+          setIsPIConfigured(result.config.isPIConfigured);
+          setCurrentMode(result.config.mode || 'development');
+        }
+      } catch (error) {
+        console.error('Error checking PI config:', error);
+      }
+    };
+    
+    checkPIConfig();
     loadWellPadData();
   };
 
@@ -127,9 +152,16 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${currentMode === 'production' ? 'bg-green-500 animate-pulse' : 'bg-blue-500'}`}></div>
+                <span className="text-sm text-slate-600 dark:text-slate-300">
+                  {currentMode === 'production' ? 'Production Mode' : 'Development Mode'}
+                </span>
+              </div>
+              
+              <div className="flex items-center gap-2">
                 <div className={`w-3 h-3 rounded-full ${isPIConfigured ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`}></div>
                 <span className="text-sm text-slate-600 dark:text-slate-300">
-                  {isPIConfigured ? 'PI Connected' : 'Simulated Data'}
+                  {isPIConfigured ? 'PI Configured' : 'Not Configured'}
                 </span>
               </div>
               
@@ -138,7 +170,7 @@ export default function Home() {
                 className="flex items-center gap-2 px-3 py-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
               >
                 <Settings className="w-4 h-4" />
-                PI Config
+                Settings
               </button>
               
               <button

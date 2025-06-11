@@ -3,15 +3,17 @@ import { piSystemService } from '@/services/pi-system';
 
 export async function GET() {
   try {
-    const testResult = await piSystemService.testConnection();
+    const result = await piSystemService.testConnection();
     
     return NextResponse.json({
-      success: testResult.success,
-      message: testResult.message,
+      success: result.success,
+      message: result.message,
+      details: result.details,
+      mode: piSystemService.getMode(),
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('PI connection test error:', error);
+    console.error('Connection test error:', error);
     return NextResponse.json(
       { 
         success: false, 
