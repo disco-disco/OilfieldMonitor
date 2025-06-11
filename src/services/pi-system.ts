@@ -65,8 +65,35 @@ export class PISystemService {
       };
     }
 
-    // Production mode - test actual PI connection
-    return await this.testActualPIConnection(config);
+    // Production mode - test actual PI connection using server-side API
+    try {
+      console.log('Testing actual PI connection in production mode...');
+      
+      const response = await fetch('/api/pi-system/connection-test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ config })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Connection test result:', result);
+        return result;
+      } else {
+        return {
+          success: false,
+          message: `Connection test failed: ${response.status} ${response.statusText}`
+        };
+      }
+    } catch (error) {
+      console.error('Connection test error:', error);
+      return {
+        success: false,
+        message: `Connection test failed: ${error}`
+      };
+    }
   }
 
   /**
@@ -132,21 +159,57 @@ export class PISystemService {
    */
   private async testServerReachability(serverName: string): Promise<boolean> {
     try {
-      // In production, this would use actual PI Web API or SDK
-      // For now, we'll simulate the test
-      
-      // Example implementation would be:
-      /*
-      const response = await fetch(`https://${serverName}/piwebapi`, {
-        method: 'GET',
-        timeout: 5000
-      });
-      return response.ok;
-      */
-      
       console.log(`Testing server reachability: ${serverName}`);
-      // Simulate network test - in production this would be real
-      return true;
+      
+      // Try multiple common PI Web API endpoints
+      const possibleEndpoints = [
+        `https://${serverName}/piwebapi`,
+        `https://${serverName}:443/piwebapi`,
+        `http://${serverName}/piwebapi`,
+        `http://${serverName}:5985/piwebapi`
+      ];
+
+      for (const endpoint of possibleEndpoints) {
+        try {
+          console.log(`Attempting to connect to: ${endpoint}`);
+          
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+          
+          const response = await fetch(endpoint, {
+            method: 'GET',
+            signal: controller.signal,
+            headers: {
+              'Accept': 'application/json',
+            },
+            // Allow CORS for testing
+            mode: 'cors'
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (response.ok || response.status === 401) {
+            // 401 is expected if authentication is required - server is reachable
+            console.log(`Server reachable at: ${endpoint} (Status: ${response.status})`);
+            return true;
+          }
+          
+        } catch (fetchError: unknown) {
+          if (fetchError instanceof Error) {
+            if (fetchError.name === 'AbortError') {
+              console.log(`Timeout connecting to: ${endpoint}`);
+            } else {
+              console.log(`Failed to connect to: ${endpoint} - ${fetchError.message}`);
+            }
+          } else {
+            console.log(`Failed to connect to: ${endpoint} - Unknown error`);
+          }
+        }
+      }
+      
+      console.error(`All connection attempts failed for server: ${serverName}`);
+      return false;
+      
     } catch (error) {
       console.error('Server reachability test failed:', error);
       return false;
@@ -158,9 +221,92 @@ export class PISystemService {
    */
   private async testDatabaseExists(config: PIServerConfig): Promise<boolean> {
     try {
-      // In production, this would query PI AF for database existence
       console.log(`Testing database existence: ${config.afDatabaseName}`);
-      return true;
+      
+      // Try to get the PI Web API endpoint for the server
+      const possibleEndpoints = [
+        `https://${config.afServerName}/piwebapi`,
+        `https://${config.afServerName}:443/piwebapi`,
+        `http://${config.afServerName}/piwebapi`,
+        `http://${config.afServerName}:5985/piwebapi`
+      ];
+
+      for (const baseEndpoint of possibleEndpoints) {
+        try {
+          // Try to get the asset server
+          const assetServerUrl = `${baseEndpoint}/assetservers`;
+          console.log(`Checking asset servers at: ${assetServerUrl}`);
+          
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+          
+          const response = await fetch(assetServerUrl, {
+            method: 'GET',
+            signal: controller.signal,
+            headers: {
+              'Accept': 'application/json',
+            },
+            mode: 'cors'
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Asset servers response:', data);
+            
+            // Look for the asset server
+            if (data.Items && data.Items.length > 0) {
+              for (const server of data.Items) {
+                // Now try to get databases from this server
+                const databasesUrl = `${baseEndpoint}/assetservers/${server.Name}/assetdatabases`;
+                console.log(`Checking databases at: ${databasesUrl}`);
+                
+                const dbResponse = await fetch(databasesUrl, {
+                  method: 'GET',
+                  headers: { 'Accept': 'application/json' },
+                  mode: 'cors'
+                });
+                
+                if (dbResponse.ok) {
+                  const dbData = await dbResponse.json();
+                  console.log('Databases response:', dbData);
+                  
+                  if (dbData.Items) {
+                    const foundDatabase = dbData.Items.find((db: { Name: string }) => 
+                      db.Name.toLowerCase() === config.afDatabaseName.toLowerCase()
+                    );
+                    
+                    if (foundDatabase) {
+                      console.log(`Database found: ${config.afDatabaseName}`);
+                      return true;
+                    }
+                  }
+                }
+              }
+            }
+          } else if (response.status === 401) {
+            console.log('Authentication required - but server is accessible');
+            // For now, assume database exists if server requires auth
+            return true;
+          }
+          
+        } catch (fetchError: unknown) {
+          if (fetchError instanceof Error) {
+            if (fetchError.name === 'AbortError') {
+              console.log(`Timeout checking database at: ${baseEndpoint}`);
+            } else {
+              console.log(`Failed to check database at: ${baseEndpoint} - ${fetchError.message}`);
+            }
+          } else {
+            console.log(`Failed to check database at: ${baseEndpoint} - Unknown error`);
+          }
+        }
+      }
+      
+      console.error(`Database not found or inaccessible: ${config.afDatabaseName}`);
+      return false;
+      
     } catch (error) {
       console.error('Database existence test failed:', error);
       return false;
@@ -172,9 +318,72 @@ export class PISystemService {
    */
   private async testElementPath(config: PIServerConfig): Promise<boolean> {
     try {
-      // In production, this would verify the element path exists in PI AF
       console.log(`Testing element path: ${config.parentElementPath}`);
-      return true;
+      
+      const possibleEndpoints = [
+        `https://${config.afServerName}/piwebapi`,
+        `https://${config.afServerName}:443/piwebapi`,
+        `http://${config.afServerName}/piwebapi`,
+        `http://${config.afServerName}:5985/piwebapi`
+      ];
+
+      for (const baseEndpoint of possibleEndpoints) {
+        try {
+          // Construct the element path URL
+          // PI Web API uses a specific format for element paths
+          const encodedPath = encodeURIComponent(`\\\\${config.afServerName}\\${config.afDatabaseName}\\${config.parentElementPath}`);
+          const elementUrl = `${baseEndpoint}/elements?path=${encodedPath}`;
+          
+          console.log(`Checking element path at: ${elementUrl}`);
+          
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+          
+          const response = await fetch(elementUrl, {
+            method: 'GET',
+            signal: controller.signal,
+            headers: {
+              'Accept': 'application/json',
+            },
+            mode: 'cors'
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Element path response:', data);
+            
+            if (data.WebId) {
+              console.log(`Element path exists: ${config.parentElementPath}`);
+              return true;
+            }
+          } else if (response.status === 401) {
+            console.log('Authentication required for element path check');
+            // Assume path exists if server requires auth
+            return true;
+          } else if (response.status === 404) {
+            console.log(`Element path not found: ${config.parentElementPath}`);
+          } else {
+            console.log(`Element path check failed with status: ${response.status}`);
+          }
+          
+        } catch (fetchError: unknown) {
+          if (fetchError instanceof Error) {
+            if (fetchError.name === 'AbortError') {
+              console.log(`Timeout checking element path at: ${baseEndpoint}`);
+            } else {
+              console.log(`Failed to check element path at: ${baseEndpoint} - ${fetchError.message}`);
+            }
+          } else {
+            console.log(`Failed to check element path at: ${baseEndpoint} - Unknown error`);
+          }
+        }
+      }
+      
+      console.error(`Element path not found or inaccessible: ${config.parentElementPath}`);
+      return false;
+      
     } catch (error) {
       console.error('Element path test failed:', error);
       return false;
@@ -184,12 +393,98 @@ export class PISystemService {
   /**
    * Test attribute accessibility
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  private async testAttributeAccess(_config: PIServerConfig): Promise<boolean> {
+  private async testAttributeAccess(config: PIServerConfig): Promise<boolean> {
     try {
-      // In production, this would test reading attributes from a sample element
       console.log('Testing attribute accessibility');
-      return true;
+      
+      const possibleEndpoints = [
+        `https://${config.afServerName}/piwebapi`,
+        `https://${config.afServerName}:443/piwebapi`,
+        `http://${config.afServerName}/piwebapi`,
+        `http://${config.afServerName}:5985/piwebapi`
+      ];
+
+      for (const baseEndpoint of possibleEndpoints) {
+        try {
+          // First, get the parent element
+          const encodedPath = encodeURIComponent(`\\\\${config.afServerName}\\${config.afDatabaseName}\\${config.parentElementPath}`);
+          const elementUrl = `${baseEndpoint}/elements?path=${encodedPath}`;
+          
+          console.log(`Getting parent element for attribute test: ${elementUrl}`);
+          
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+          
+          const response = await fetch(elementUrl, {
+            method: 'GET',
+            signal: controller.signal,
+            headers: {
+              'Accept': 'application/json',
+            },
+            mode: 'cors'
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (response.ok) {
+            const elementData = await response.json();
+            
+            if (elementData.WebId) {
+              // Try to get child elements (wellpads)
+              const childElementsUrl = `${baseEndpoint}/elements/${elementData.WebId}/elements`;
+              console.log(`Getting child elements: ${childElementsUrl}`);
+              
+              const childResponse = await fetch(childElementsUrl, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+                mode: 'cors'
+              });
+              
+              if (childResponse.ok) {
+                const childData = await childResponse.json();
+                
+                if (childData.Items && childData.Items.length > 0) {
+                  // Try to get attributes from the first child element
+                  const firstChild = childData.Items[0];
+                  const attributesUrl = `${baseEndpoint}/elements/${firstChild.WebId}/attributes`;
+                  console.log(`Testing attribute access: ${attributesUrl}`);
+                  
+                  const attrResponse = await fetch(attributesUrl, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' },
+                    mode: 'cors'
+                  });
+                  
+                  if (attrResponse.ok) {
+                    const attrData = await attrResponse.json();
+                    console.log('Attributes accessible:', attrData.Items ? attrData.Items.length : 0, 'attributes found');
+                    return true;
+                  }
+                }
+              }
+            }
+          } else if (response.status === 401) {
+            console.log('Authentication required for attribute access test');
+            // Assume attributes are accessible if server requires auth
+            return true;
+          }
+          
+        } catch (fetchError: unknown) {
+          if (fetchError instanceof Error) {
+            if (fetchError.name === 'AbortError') {
+              console.log(`Timeout testing attribute access at: ${baseEndpoint}`);
+            } else {
+              console.log(`Failed to test attribute access at: ${baseEndpoint} - ${fetchError.message}`);
+            }
+          } else {
+            console.log(`Failed to test attribute access at: ${baseEndpoint} - Unknown error`);
+          }
+        }
+      }
+      
+      console.error('Attribute access test failed - no accessible attributes found');
+      return false;
+      
     } catch (error) {
       console.error('Attribute access test failed:', error);
       return false;
