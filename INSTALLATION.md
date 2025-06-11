@@ -1,7 +1,7 @@
 # PLINQO OILFIELD Monitoring Dashboard - Installation Guide
 
 ## Overview
-This is a modern oil field monitoring dashboard built with Next.js 15, TypeScript, and Tailwind CSS v4. It provides real-time monitoring of wellpads and wells with AVEVA PI System integration for production data.
+This is a modern oil field monitoring dashboard built with Next.js 15, TypeScript, and Tailwind CSS v4. It provides real-time monitoring of wellpads and wells with AVEVA PI System integration for production data. Features include persistent configuration storage, development/production mode switching, and comprehensive connection testing.
 
 ## Prerequisites
 
@@ -14,14 +14,15 @@ This is a modern oil field monitoring dashboard built with Next.js 15, TypeScrip
 ### Optional (for Production)
 - **AVEVA PI System**: PI AF Server and PI Data Archive
 - **Network Access**: To PI System infrastructure
+- **Windows Authentication**: For PI System access (typical setup)
 
 ## Installation Steps
 
 ### 1. Clone the Repository
 
 ```bash
-# Clone the repository
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+# Clone the repository (update with your actual repository URL)
+git clone https://github.com/disco-disco/OilfieldMonitor.git
 
 # Navigate to the project directory
 cd modern-website
@@ -42,27 +43,19 @@ npm install
 # - ESLint and other dev tools
 ```
 
-### 3. Environment Setup
+### 3. Environment Setup (Optional)
 
-Create a `.env.local` file in the root directory for environment variables:
+Create a `.env.local` file in the root directory for optional environment variables:
 
 ```bash
-# Create environment file
+# Create environment file (optional)
 touch .env.local
 ```
 
-Add the following environment variables to `.env.local`:
+Add optional environment variables to `.env.local`:
 
 ```env
-# Development/Production Mode
-NODE_ENV=development
-
-# PI System Configuration (Optional - for production)
-PI_AF_SERVER=your-pi-af-server.company.com
-PI_AF_DATABASE=your-asset-database
-PI_DATA_ARCHIVE=your-pi-da-server.company.com
-
-# Application Settings
+# Application Settings (optional)
 NEXT_PUBLIC_APP_NAME=PLINQO OILFIELD
 NEXT_PUBLIC_COMPANY_NAME=Your Company Name
 
@@ -70,6 +63,8 @@ NEXT_PUBLIC_COMPANY_NAME=Your Company Name
 # NEXTAUTH_SECRET=your-secret-key
 # NEXTAUTH_URL=http://localhost:3000
 ```
+
+**Note**: PI System configuration is now handled through the web interface and stored in `pi-config.json` (automatically created).
 
 ### 4. Start Development Server
 
@@ -79,7 +74,7 @@ npm run dev
 ```
 
 The application will be available at:
-- **Local**: http://localhost:3000
+- **Local**: http://localhost:3000 (or http://localhost:3001 if 3000 is in use)
 - **Network**: http://[your-ip]:3000
 
 ### 5. Build for Production
@@ -94,43 +89,115 @@ npm start
 
 ## Configuration
 
-### PI System Integration
+### Application Modes
 
-1. **Access Configuration Interface**
+The application supports two operational modes that can be switched through the web interface:
+
+#### 🔵 **Development Mode** (Default)
+- Uses simulated data for all wellpads and wells
+- No PI System connection required
+- Perfect for testing, development, and demonstrations
+- Generates realistic oil field data automatically
+
+#### 🟢 **Production Mode**
+- Connects to actual AVEVA PI System
+- Reads real-time data from PI AF
+- Requires valid PI System configuration
+- Includes comprehensive connection testing
+
+### PI System Configuration Interface
+
+1. **Access Configuration**
    - Open the dashboard in your browser
    - Click the "Settings" (⚙️) button in the top-right corner
+   - The configuration modal will open
 
-2. **Configure PI AF Server**
-   - **AF Server**: Enter your PI AF Server hostname/IP
-   - **AF Database**: Enter your Asset Framework database name
-   - **PI Data Archive**: Enter your PI Data Archive server
-   - **Element Template**: Default is "WellTemplate" (adjust as needed)
+2. **Mode Switching**
+   - Use the toggle switch at the top-right of the configuration modal
+   - **Development** ←→ **Production**
+   - Mode changes are saved automatically
+   - Dashboard header shows current mode
 
-3. **Attribute Mapping**
+3. **Production Mode Configuration** (Only visible in Production Mode)
+   
+   **Server Settings:**
+   - **AF Server Name**: Enter your PI AF Server hostname/IP (e.g., `PISERVER01.company.com`)
+   - **AF Database Name**: Enter your Asset Framework database name (e.g., `PLINQO_OILFIELD`)
+   - **Parent Element Path**: Path to wellpad elements (e.g., `\\PLINQO_OILFIELD\\Production`)
+   - **Template Name**: Element template name (e.g., `WellPadTemplate`)
+   
+   **Authentication (Optional):**
+   - **Username**: Domain username for PI System access
+   - **Password**: Password for authentication
+   - **Note**: Windows Authentication is typically used in production
+
+4. **Attribute Mapping Configuration**
    Configure the PI AF attribute names for each measurement:
-   - **Oil Rate**: `OilRate` (default)
-   - **Liquid Rate**: `LiquidRate` (default)
-   - **Water Cut**: `WaterCut` (default)
-   - **ESP Frequency**: `ESPFrequency` (default)
-   - **Plan Target**: `PlanTarget` (default)
+   - **Oil Rate**: Default `OilRate`
+   - **Liquid Rate**: Default `LiquidRate`
+   - **Water Cut**: Default `WaterCut`
+   - **ESP Frequency**: Default `ESPFrequency`
+   - **Plan Target**: Default `PlanTarget`
+   
+   *Note: In Development Mode, attribute mapping is optional*
 
-4. **Test Connection**
+5. **Save Configuration**
+   - Click "Save Configuration" to persist all settings
+   - Configuration is automatically saved to `pi-config.json`
+   - Settings persist across application restarts
+
+6. **Test Connection**
    - Click "Test Connection" to verify PI System connectivity
-   - Ensure your network allows access to PI System servers
+   - **4-Step Validation Process**:
+     1. Server Reachability Test
+     2. Database Existence Check
+     3. Element Path Validation
+     4. Attribute Accessibility Test
+   - Detailed results show which steps pass/fail
+   - Works in both Development (simulated) and Production modes
+
+### Persistent Configuration Storage
+
+- **Automatic Storage**: All configuration saved to `pi-config.json` in project root
+- **Version Control**: `pi-config.json` is excluded from git (contains sensitive data)
+- **Backup**: Configuration persists across application restarts and deployments
+- **Format**: JSON structure with mode, server config, and attribute mappings
+
+### Dashboard Status Indicators
+
+The main dashboard header displays real-time status:
+
+#### Mode Indicator
+- 🔵 **Development Mode**: Blue dot with "Development Mode" label
+- 🟢 **Production Mode**: Green dot with "Production Mode" label
+
+#### Configuration Status
+- 🟢 **PI Configured**: Green dot with "PI Configured" label
+- 🟡 **Not Configured**: Yellow dot with "Not Configured" label
 
 ### Data Source Modes
 
-The application supports two modes:
+#### 🔵 Development Mode
+- **Purpose**: Testing, development, demonstrations
+- **Data Source**: Simulated realistic wellpad data
+- **PI System**: No connection required
+- **Configuration**: Minimal setup needed
+- **Benefits**: 
+  - Instant startup
+  - No network dependencies
+  - Consistent test data
+  - Safe for development environments
 
-#### Development Mode (Default)
-- Uses simulated data for testing
-- No PI System connection required
-- Generates realistic wellpad and well data
-
-#### Production Mode
-- Connects to actual AVEVA PI System
-- Reads real-time data from PI AF
-- Requires proper PI System configuration
+#### 🟢 Production Mode
+- **Purpose**: Live operational monitoring
+- **Data Source**: Real-time AVEVA PI System data
+- **PI System**: Requires active connection
+- **Configuration**: Full server and authentication setup
+- **Benefits**:
+  - Real production data
+  - Live well monitoring
+  - Historical data access
+  - Integration with existing PI infrastructure
 
 ## Project Structure
 
@@ -138,18 +205,24 @@ The application supports two modes:
 modern-website/
 ├── src/
 │   ├── app/                    # Next.js app router
-│   │   ├── page.tsx           # Main dashboard
+│   │   ├── page.tsx           # Main dashboard with mode indicators
 │   │   ├── layout.tsx         # Root layout
 │   │   └── api/               # API routes
 │   │       └── pi-system/     # PI System integration APIs
+│   │           ├── config/    # Configuration management
+│   │           ├── test/      # Connection testing
+│   │           └── wellpads/  # Data retrieval
 │   ├── components/            # React components
-│   │   └── PISystemConfig.tsx # PI configuration interface
+│   │   └── PISystemConfig.tsx # Enhanced PI configuration interface
 │   ├── services/              # Business logic
-│   │   └── pi-system.ts       # PI System service
+│   │   ├── pi-system.ts       # PI System service with mode support
+│   │   └── config-manager.ts  # Persistent configuration management
 │   └── types/                 # TypeScript definitions
-│       └── pi-system.ts       # PI System types
+│       └── pi-system.ts       # PI System types and interfaces
 ├── public/                    # Static assets
+├── pi-config.json            # Persistent configuration file (auto-created)
 ├── package.json              # Dependencies and scripts
+├── .gitignore               # Excludes pi-config.json for security
 └── tailwind.config.ts        # Tailwind CSS configuration
 ```
 
@@ -173,15 +246,16 @@ npm run clean       # Clean build artifacts
 
 ### Dashboard Overview
 - **10 WellPads**: WellPad 01 through WellPad 10
-- **10-20 Wells per Pad**: Dynamically generated
-- **Real-time Monitoring**: Live data updates
-- **Status Indicators**: Color-coded well status
+- **10-20 Wells per Pad**: Dynamically generated or from PI System
+- **Real-time Monitoring**: Live data updates with refresh capability
+- **Mode Indicators**: Visual display of current operational mode
+- **Status Indicators**: Color-coded well status and configuration status
 
 ### Well Monitoring
 Each well displays:
-- **Well Name**: Format PL-XXX
+- **Well Name**: Format PL-XXX (PLINQO wells)
 - **Oil Rate**: barrels per day (bbl/day)
-- **Liquid Rate**: total liquid production
+- **Liquid Rate**: total liquid production (bbl/day)
 - **Plan Deviation**: percentage from target
 - **Water Cut**: water percentage
 - **ESP Frequency**: pump frequency in Hz
@@ -232,13 +306,25 @@ npm run lint --fix
 - Consider pagination for wellpads with >50 wells
 - Implement data caching for PI System responses
 - Use React.memo for well components
+- **Configuration**: Persistent storage reduces API calls
 
 #### For Production Deployment
 - Enable compression in Next.js config
 - Configure CDN for static assets
 - Set up monitoring and logging
+- **PI System**: Use dedicated network connections for reliability
 
 ## Deployment
+
+### Quick Start (Development)
+```bash
+# Clone, install, and run in development mode
+git clone https://github.com/disco-disco/OilfieldMonitor.git
+cd modern-website
+npm install
+npm run dev
+# Open http://localhost:3000 - Ready to use with simulated data!
+```
 
 ### Development Deployment
 ```bash
@@ -246,15 +332,16 @@ npm run build
 npm start
 ```
 
-### Production Deployment Options
+### Production Deployment
 
 #### 1. Traditional Server
 ```bash
 # Build the application
 npm run build
 
-# Copy files to server
+# Copy files to server including pi-config.json for settings persistence
 # Install Node.js on server
+# Configure PI System connectivity
 # Run: npm start
 ```
 
@@ -265,15 +352,25 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production
 COPY . .
+# Note: pi-config.json will be created at runtime
 RUN npm run build
 EXPOSE 3000
 CMD ["npm", "start"]
 ```
 
-#### 3. Vercel (Recommended)
+#### 3. Vercel (Recommended for Development/Demo)
 ```bash
 # Install Vercel CLI
 npm i -g vercel
+
+# Deploy (note: PI System connections may require additional setup)
+vercel
+```
+
+**Important for Production**: Ensure your deployment environment can:
+- Access AVEVA PI System servers
+- Persist the `pi-config.json` file across deployments
+- Handle Windows Authentication if required by your PI System
 
 # Deploy
 vercel
@@ -315,16 +412,88 @@ npm install next@latest react@latest react-dom@latest
 ### PI System Endpoints
 
 #### GET /api/pi-system/wellpads
-Returns all wellpad and well data
+- **Purpose**: Returns all wellpad and well data
+- **Mode Handling**: Automatically serves simulated data (development) or PI data (production)
+- **Response**: Array of wellpad objects with wells and production metrics
 
 #### GET /api/pi-system/config
-Returns current PI System configuration
+- **Purpose**: Returns current system configuration
+- **Response**: Mode, PI server config, attribute mappings, configuration status
+- **Format**: Includes `isPIConfigured` flag and current operational mode
 
 #### POST /api/pi-system/config
-Updates PI System configuration
+- **Purpose**: Updates PI System configuration and mode
+- **Body**: `{ config, attributeMapping, mode }`
+- **Persistence**: Automatically saves to `pi-config.json`
+- **Validation**: Checks required fields for production mode
 
 #### GET /api/pi-system/test
-Tests PI System connectivity
+- **Purpose**: Tests PI System connectivity with detailed validation
+- **Response**: 4-step test results with detailed status for each step
+- **Modes**: Simulated testing (development) or real testing (production)
+
+### Configuration File Format
+
+The `pi-config.json` file structure:
+
+```json
+{
+  "mode": "development|production",
+  "piServerConfig": {
+    "afServerName": "PISERVER01.company.com",
+    "afDatabaseName": "PLINQO_OILFIELD",
+    "parentElementPath": "\\PLINQO_OILFIELD\\Production",
+    "templateName": "WellPadTemplate",
+    "username": "optional",
+    "password": "optional"
+  },
+  "attributeMapping": {
+    "oilRate": "OilRate",
+    "liquidRate": "LiquidRate",
+    "waterCut": "WaterCut",
+    "espFrequency": "ESPFrequency",
+    "planTarget": "PlanTarget"
+  },
+  "lastUpdated": "2025-06-11T19:45:00.000Z"
+}
+```
+
+## Quick Start Guide
+
+### For Development/Testing
+1. `git clone https://github.com/disco-disco/OilfieldMonitor.git`
+2. `cd modern-website && npm install`
+3. `npm run dev`
+4. Open http://localhost:3000
+5. **Ready!** Dashboard loads with simulated data
+
+### For Production PI System
+1. Complete development setup above
+2. Click "Settings" button in dashboard
+3. Toggle to "Production Mode"
+4. Fill in PI AF server details
+5. Configure attribute mappings
+6. Click "Test Connection" to verify
+7. Save configuration
+8. **Ready!** Dashboard loads with live PI data
+
+## Troubleshooting
+
+### Configuration Issues
+- **Settings Lost**: Check if `pi-config.json` exists and has correct permissions
+- **Mode Not Switching**: Clear browser cache and reload
+- **Configuration Not Saving**: Check file system write permissions
+
+### PI System Connection Issues
+1. **Server Unreachable**: Verify network connectivity and server name
+2. **Database Not Found**: Confirm AF database name and access permissions
+3. **Authentication Failed**: Check username/password or Windows Authentication setup
+4. **Element Path Invalid**: Verify the path exists in PI AF Explorer
+
+### Development Issues
+- **Port Already in Use**: App automatically uses port 3001 if 3000 is busy
+- **Build Errors**: Run `rm -rf .next && npm run build` to clean and rebuild
+- **Type Errors**: Run `npm run type-check` to see TypeScript issues
 
 ## License
 
@@ -336,3 +505,7 @@ For technical support or questions:
 - Development Team: [your-email@company.com]
 - PI System Admin: [pi-admin@company.com]
 - Operations: [operations@company.com]
+
+---
+
+**Last Updated**: June 2025 - Version with persistent configuration and mode switching
