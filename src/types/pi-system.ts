@@ -29,6 +29,7 @@ export interface WellData {
   name: string;
   wellPadName: string;
   oilRate: number;
+  liquidRate: number;      // Added liquid rate
   waterCut: number;
   espFrequency: number;
   planDeviation: number;
@@ -56,6 +57,7 @@ export interface PIConnectionStatus {
 // Configuration for attribute mapping
 export interface AttributeMapping {
   oilRate: string;        // PI Attribute name for oil rate
+  liquidRate: string;     // PI Attribute name for liquid rate
   waterCut: string;       // PI Attribute name for water cut
   espFrequency: string;   // PI Attribute name for ESP frequency
   planTarget: string;     // PI Attribute name for plan target
@@ -63,6 +65,7 @@ export interface AttributeMapping {
 
 export const DEFAULT_ATTRIBUTE_MAPPING: AttributeMapping = {
   oilRate: 'Oil_Rate',
+  liquidRate: 'Liquid_Rate',
   waterCut: 'Water_Cut',
   espFrequency: 'ESP_Frequency',
   planTarget: 'Plan_Target'

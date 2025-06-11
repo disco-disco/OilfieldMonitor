@@ -49,6 +49,7 @@ export default function Home() {
       for (let wellNum = 0; wellNum < wellCount; wellNum++) {
         const wellNumber = Math.floor(Math.random() * 900) + 100;
         const oilRate = Math.floor(Math.random() * 150) + 50;
+        const liquidRate = Math.floor(oilRate * (1 + Math.random() * 0.5)); // Liquid rate is typically higher than oil rate
         const waterCut = Math.floor(Math.random() * 30) + 5;
         const espFrequency = Math.floor(Math.random() * 20) + 40;
         const planTarget = oilRate + Math.floor(Math.random() * 40) - 20;
@@ -62,6 +63,7 @@ export default function Home() {
           name: `PL-${wellNumber.toString().padStart(3, '0')}`,
           wellPadName: `WellPad ${padNum.toString().padStart(2, '0')}`,
           oilRate,
+          liquidRate,
           waterCut,
           espFrequency,
           planDeviation: Math.round(deviation * 10) / 10,
@@ -250,6 +252,12 @@ export default function Home() {
                     <div className="mb-1">
                       <div className="text-xs text-slate-500 dark:text-slate-400">Oil Rate</div>
                       <div className="font-semibold text-slate-900 dark:text-white text-sm">{well.oilRate} bbl/day</div>
+                    </div>
+
+                    {/* Liquid Rate */}
+                    <div className="mb-1">
+                      <div className="text-xs text-slate-500 dark:text-slate-400">Liquid Rate</div>
+                      <div className="font-semibold text-blue-600 text-sm">{well.liquidRate} bbl/day</div>
                     </div>
 
                     {/* Deviation */}

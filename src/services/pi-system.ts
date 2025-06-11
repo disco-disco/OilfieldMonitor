@@ -130,11 +130,13 @@ export class PISystemService {
       const attributes = await piClient.element.getAttributes(well.WebId);
       
       const oilRateAttr = attributes.find(attr => attr.Name === this.attributeMapping.oilRate);
+      const liquidRateAttr = attributes.find(attr => attr.Name === this.attributeMapping.liquidRate);
       const waterCutAttr = attributes.find(attr => attr.Name === this.attributeMapping.waterCut);
       const espFreqAttr = attributes.find(attr => attr.Name === this.attributeMapping.espFrequency);
       const planTargetAttr = attributes.find(attr => attr.Name === this.attributeMapping.planTarget);
       
       const oilRate = await piClient.attribute.getValue(oilRateAttr.WebId);
+      const liquidRate = await piClient.attribute.getValue(liquidRateAttr.WebId);
       const waterCut = await piClient.attribute.getValue(waterCutAttr.WebId);
       const espFreq = await piClient.attribute.getValue(espFreqAttr.WebId);
       const planTarget = await piClient.attribute.getValue(planTargetAttr.WebId);
@@ -146,6 +148,7 @@ export class PISystemService {
         name: well.Name,
         wellPadName: wellPadElement.Name,
         oilRate: oilRate.Value,
+        liquidRate: liquidRate.Value,
         waterCut: waterCut.Value,
         espFrequency: espFreq.Value,
         planDeviation: deviation,
@@ -182,6 +185,7 @@ export class PISystemService {
       for (let wellNum = 0; wellNum < wellCount; wellNum++) {
         const wellNumber = Math.floor(Math.random() * 900) + 100;
         const oilRate = Math.floor(Math.random() * 150) + 50;
+        const liquidRate = Math.floor(oilRate * (1 + Math.random() * 0.5)); // Liquid rate is typically higher than oil rate
         const waterCut = Math.floor(Math.random() * 30) + 5;
         const espFrequency = Math.floor(Math.random() * 20) + 40;
         const planTarget = oilRate + Math.floor(Math.random() * 40) - 20;
@@ -191,6 +195,7 @@ export class PISystemService {
           name: `PL-${wellNumber.toString().padStart(3, '0')}`,
           wellPadName: `WellPad ${padNum.toString().padStart(2, '0')}`,
           oilRate,
+          liquidRate,
           waterCut,
           espFrequency,
           planDeviation: Math.round(deviation * 10) / 10,
