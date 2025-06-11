@@ -13,12 +13,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Oil Well Monitor - Real-time Well Parameters",
-  description: "Monitor oil well production parameters in real-time. Track pressure, temperature, flow rate, and production metrics.",
-  keywords: ["oil well monitoring", "production parameters", "well data", "oil field management"],
-  authors: [{ name: "Oil Well Monitor Team" }],
-  viewport: "width=device-width, initial-scale=1",
+  title: "PLINQO OILFIELD - Real-time Well Monitoring",
+  description: "Monitor PLINQO oil field production parameters in real-time. Track pressure, temperature, flow rate, and production metrics with PI System integration.",
+  keywords: ["PLINQO oilfield", "oil well monitoring", "PI System", "production parameters", "well data", "oil field management"],
+  authors: [{ name: "PLINQO OILFIELD Monitoring Team" }],
 };
+
+export const viewport = "width=device-width, initial-scale=1";
 
 export default function RootLayout({
   children,
