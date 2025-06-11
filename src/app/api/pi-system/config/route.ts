@@ -62,6 +62,3 @@ export async function GET() {
     );
   }
 }
-    );
-  }
-}

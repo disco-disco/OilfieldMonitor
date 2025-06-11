@@ -32,7 +32,6 @@ export default function PISystemConfig({ onConfigured }: PIConfigProps) {
   const [attributeMapping, setAttributeMapping] = useState<AttributeMapping>(DEFAULT_ATTRIBUTE_MAPPING);
   const [isLoading, setIsLoading] = useState(false);
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
-  const [isConfigured, setIsConfigured] = useState(false);
 
   // Load existing configuration on mount
   useEffect(() => {
@@ -54,7 +53,6 @@ export default function PISystemConfig({ onConfigured }: PIConfigProps) {
         if (result.config.mode) {
           setMode(result.config.mode);
         }
-        setIsConfigured(result.config.isPIConfigured);
       }
     } catch (error) {
       console.error('Failed to load configuration:', error);
@@ -92,13 +90,13 @@ export default function PISystemConfig({ onConfigured }: PIConfigProps) {
       const result = await response.json();
       
       if (result.success) {
-        setIsConfigured(true);
         setTestResult({ success: true, message: 'PI System configured and saved successfully' });
         onConfigured();
       } else {
         setTestResult({ success: false, message: result.message });
       }
-    } catch (error) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (_error) {
       setTestResult({ success: false, message: 'Failed to configure PI System' });
     } finally {
       setIsLoading(false);
@@ -125,7 +123,8 @@ export default function PISystemConfig({ onConfigured }: PIConfigProps) {
       const response = await fetch('/api/pi-system/test');
       const result = await response.json();
       setTestResult(result);
-    } catch (error) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (_error) {
       setTestResult({ success: false, message: 'Connection test failed' });
     } finally {
       setIsLoading(false);

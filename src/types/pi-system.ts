@@ -11,7 +11,7 @@ export interface PIServerConfig {
 
 export interface PIAttribute {
   name: string;
-  value: any;
+  value: string | number | boolean | null;
   timestamp: Date;
   quality: string;
   uom?: string; // Unit of Measure

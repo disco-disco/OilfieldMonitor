@@ -1,4 +1,4 @@
-import { PIServerConfig, PIElement, PIAttribute, WellData, WellPadData, AttributeMapping, DEFAULT_ATTRIBUTE_MAPPING } from '@/types/pi-system';
+import { PIServerConfig, PIElement, WellData, WellPadData, AttributeMapping } from '@/types/pi-system';
 import { configManager } from './config-manager';
 
 export interface PIConnectionTestResult {
@@ -184,7 +184,8 @@ export class PISystemService {
   /**
    * Test attribute accessibility
    */
-  private async testAttributeAccess(config: PIServerConfig): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private async testAttributeAccess(_config: PIServerConfig): Promise<boolean> {
     try {
       // In production, this would test reading attributes from a sample element
       console.log('Testing attribute accessibility');
@@ -214,7 +215,8 @@ export class PISystemService {
   /**
    * Read actual data from PI System (production)
    */
-  private async readFromPI(config: PIServerConfig): Promise<WellPadData[]> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private async readFromPI(_config: PIServerConfig): Promise<WellPadData[]> {
     try {
       // This would implement actual PI AF reading logic
       // Example pseudo-code:
@@ -260,8 +262,10 @@ export class PISystemService {
   /**
    * Read wells from a wellpad element (production helper)
    */
-  private async readWellsFromPad(wellPadElement: PIElement): Promise<WellData[]> {
-    const attributeMapping = configManager.getAttributeMapping();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private async readWellsFromPad(_wellPadElement: PIElement): Promise<WellData[]> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _attributeMapping = configManager.getAttributeMapping();
     const wells: WellData[] = [];
     
     try {

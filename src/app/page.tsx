@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Activity, Droplets, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Zap, Settings, RefreshCw } from "lucide-react";
+import { useState, useEffect, useCallback } from 'react';
+import { Droplets, TrendingUp, TrendingDown, CheckCircle, Zap, Settings, RefreshCw } from "lucide-react";
 import PISystemConfig from '@/components/PISystemConfig';
 import { WellPadData } from '@/types/pi-system';
 
@@ -14,7 +14,7 @@ export default function Home() {
   const [currentMode, setCurrentMode] = useState<'development' | 'production'>('development');
 
   // Load wellpad data
-  const loadWellPadData = async () => {
+  const loadWellPadData = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await fetch('/api/pi-system/wellpads');
@@ -37,7 +37,7 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   // Generate simulated data as fallback
   const generateSimulatedData = (): WellPadData[] => {
@@ -108,7 +108,7 @@ export default function Home() {
 
     checkPIConfig();
     loadWellPadData();
-  }, []);
+  }, [loadWellPadData]);
 
   const handlePIConfigured = () => {
     setShowConfig(false);
