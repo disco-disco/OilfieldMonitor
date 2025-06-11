@@ -65,35 +65,8 @@ export class PISystemService {
       };
     }
 
-    // Production mode - test actual PI connection using server-side API
-    try {
-      console.log('Testing actual PI connection in production mode...');
-      
-      const response = await fetch('/api/pi-system/connection-test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ config })
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Connection test result:', result);
-        return result;
-      } else {
-        return {
-          success: false,
-          message: `Connection test failed: ${response.status} ${response.statusText}`
-        };
-      }
-    } catch (error) {
-      console.error('Connection test error:', error);
-      return {
-        success: false,
-        message: `Connection test failed: ${error}`
-      };
-    }
+    // Production mode - test actual PI connection directly
+    return await this.testActualPIConnection(config);
   }
 
   /**
