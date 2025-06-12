@@ -44,6 +44,7 @@ export interface WellPadData {
   totalProduction: number;
   averageWaterCut: number;
   wellCount: number;
+  isConnectedToPI?: boolean; // Optional flag to indicate PI connection status
 }
 
 // PI AF Connection Status
