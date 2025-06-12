@@ -1,5 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Handle OPTIONS request for CORS preflight
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { url } = await request.json();
@@ -58,7 +70,14 @@ export async function POST(request: NextRequest) {
       console.log(`   Status: ${response.status} ${response.statusText}`);
       console.log(`   Headers: ${JSON.stringify(result.details.headers)}`);
 
-      return NextResponse.json(result);
+      const successResponse = NextResponse.json(result);
+      
+      // Add CORS headers to allow cross-origin requests
+      successResponse.headers.set('Access-Control-Allow-Origin', '*');
+      successResponse.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      successResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      
+      return successResponse;
 
     } catch (fetchError: unknown) {
       const error = fetchError as Error;
@@ -78,16 +97,25 @@ export async function POST(request: NextRequest) {
         troubleshootingTip = 'CORS policy blocking request';
       }
 
-      return NextResponse.json({
+      const errorResponse = NextResponse.json({
         success: false,
         message: `Connection failed: ${error.message}`,
         details: {
           url,
           errorName: error.name,
           errorMessage: error.message,
-          troubleshootingTip
+          troubleshootingTip,
+          corsNote: error.message.includes('fetch') ? 
+            'This may be a CORS issue. Try the direct browser test or configure PI Web API CORS settings.' : undefined
         }
       });
+
+      // Add CORS headers to allow cross-origin requests
+      errorResponse.headers.set('Access-Control-Allow-Origin', '*');
+      errorResponse.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      
+      return errorResponse;
     }
 
   } catch (error) {

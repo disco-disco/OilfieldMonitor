@@ -646,6 +646,34 @@ export class PISystemService {
   getMode(): 'development' | 'production' {
     return configManager.getMode();
   }
+
+  /**
+   * Make a request to PI Web API through our proxy to avoid CORS issues
+   */
+  private async makeAPIRequest(url: string, method: string = 'GET', body?: any): Promise<any> {
+    try {
+      const response = await fetch('/api/pi-system/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          url,
+          method,
+          body
+        })
+      });
+
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(`PI Web API request failed: ${result.message} (${result.troubleshootingTip || 'No additional info'})`);
+      }
+
+      return result.data;
+    } catch (error) {
+      console.error(`PI Web API request failed for ${url}:`, error);
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance
