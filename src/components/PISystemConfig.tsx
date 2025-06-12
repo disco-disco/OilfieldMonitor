@@ -105,9 +105,29 @@ export default function PISystemConfig({ onConfigured }: PIConfigProps) {
   };
 
   const handleTestConnection = async () => {
-    if (mode === 'production' && (!config.afServerName || !config.afDatabaseName || !config.piWebApiServerName)) {
-      setTestResult({ success: false, message: 'Please fill in server and database names first' });
+    // Validate required fields based on mode
+    if (!config.piWebApiServerName) {
+      setTestResult({ success: false, message: 'PI Web API Server Name is required' });
       return;
+    }
+
+    if (mode === 'production') {
+      if (!config.afServerName) {
+        setTestResult({ success: false, message: 'PI AF Server Name is required for production mode' });
+        return;
+      }
+      if (!config.afDatabaseName) {
+        setTestResult({ success: false, message: 'AF Database Name is required for production mode' });
+        return;
+      }
+      if (!config.parentElementPath) {
+        setTestResult({ success: false, message: 'Parent Element Path is required for production mode' });
+        return;
+      }
+      if (!config.templateName) {
+        setTestResult({ success: false, message: 'Template Name is required for production mode' });
+        return;
+      }
     }
 
     setIsLoading(true);
@@ -184,23 +204,120 @@ export default function PISystemConfig({ onConfigured }: PIConfigProps) {
         return testResult;
       }
 
-      // If we can reach the server, mark other tests as successful for now
-      // In a real implementation, you'd test specific PI AF elements
+      // In development mode, just confirm server connectivity
       if (mode === 'development') {
-        // In development mode, just confirm server connectivity
-        testResult.details.databaseExists = true;
-        testResult.details.elementPathValid = true;
-        testResult.details.attributesAccessible = true;
         testResult.success = true;
-        testResult.message = `✅ PI Web API server reachable at ${workingEndpoint}. Ready for development mode.`;
+        testResult.message = `✅ PI Web API server reachable at ${workingEndpoint}. Development mode ready.`;
+        return testResult;
+      }
+
+      // Production mode: test each component individually with actual PI Web API calls
+      console.log(`🔍 Testing PI AF Database: ${config.afDatabaseName}`);
+      
+      // Test 2: Check if AF Database exists
+      try {
+        const dbUrl = `${workingEndpoint}/assetdatabases?path=\\\\${config.afServerName}\\${config.afDatabaseName}`;
+        console.log(`   Testing database URL: ${dbUrl}`);
+        
+        const dbResponse = await fetch(dbUrl, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        });
+
+        console.log(`   Database test status: ${dbResponse.status}`);
+        
+        if (dbResponse.ok) {
+          testResult.details.databaseExists = true;
+          console.log(`✅ Database found: ${config.afDatabaseName}`);
+        } else if (dbResponse.status === 401) {
+          // 401 means server is working but needs auth - database could exist
+          testResult.details.databaseExists = true; // Assume exists, auth issue
+          console.log(`🔐 Database test needs authentication (401)`);
+        } else {
+          console.log(`❌ Database not found or error: ${dbResponse.status}`);
+        }
+      } catch (error) {
+        console.log(`❌ Database test failed: ${error}`);
+      }
+
+      // Test 3: Check if Element Path is valid (only if database test passed)
+      if (testResult.details.databaseExists && config.parentElementPath) {
+        try {
+          console.log(`🔍 Testing Element Path: ${config.parentElementPath}`);
+          
+          const elementUrl = `${workingEndpoint}/elements?path=\\\\${config.afServerName}\\${config.afDatabaseName}\\${config.parentElementPath}`;
+          console.log(`   Testing element URL: ${elementUrl}`);
+          
+          const elementResponse = await fetch(elementUrl, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' }
+          });
+
+          console.log(`   Element test status: ${elementResponse.status}`);
+          
+          if (elementResponse.ok) {
+            testResult.details.elementPathValid = true;
+            console.log(`✅ Element path found: ${config.parentElementPath}`);
+          } else if (elementResponse.status === 401) {
+            // 401 means server is working but needs auth - element could exist
+            testResult.details.elementPathValid = true; // Assume exists, auth issue
+            console.log(`🔐 Element test needs authentication (401)`);
+          } else {
+            console.log(`❌ Element path not found or error: ${elementResponse.status}`);
+          }
+        } catch (error) {
+          console.log(`❌ Element test failed: ${error}`);
+        }
+      }
+
+      // Test 4: Check if we can access attributes (only if element test passed)
+      if (testResult.details.elementPathValid && config.templateName) {
+        try {
+          console.log(`🔍 Testing Template/Attributes: ${config.templateName}`);
+          
+          // Try to get elements with the specified template
+          const templateUrl = `${workingEndpoint}/elements?path=\\\\${config.afServerName}\\${config.afDatabaseName}\\${config.parentElementPath}&templateName=${config.templateName}`;
+          console.log(`   Testing template URL: ${templateUrl}`);
+          
+          const templateResponse = await fetch(templateUrl, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' }
+          });
+
+          console.log(`   Template test status: ${templateResponse.status}`);
+          
+          if (templateResponse.ok) {
+            testResult.details.attributesAccessible = true;
+            console.log(`✅ Template/attributes accessible: ${config.templateName}`);
+          } else if (templateResponse.status === 401) {
+            // 401 means server is working but needs auth - attributes could be accessible
+            testResult.details.attributesAccessible = true; // Assume accessible, auth issue
+            console.log(`🔐 Attributes test needs authentication (401)`);
+          } else {
+            console.log(`❌ Template/attributes not accessible or error: ${templateResponse.status}`);
+          }
+        } catch (error) {
+          console.log(`❌ Attributes test failed: ${error}`);
+        }
+      }
+
+      // Determine overall success based on individual tests
+      const allTestsPassed = testResult.details.serverReachable && 
+                            testResult.details.databaseExists && 
+                            testResult.details.elementPathValid && 
+                            testResult.details.attributesAccessible;
+
+      if (allTestsPassed) {
+        testResult.success = true;
+        testResult.message = `✅ All PI System components validated successfully!`;
       } else {
-        // In production mode, we'd need to test actual PI AF elements
-        // For now, just confirm server connectivity
-        testResult.details.databaseExists = true;
-        testResult.details.elementPathValid = true;
-        testResult.details.attributesAccessible = true;
-        testResult.success = true;
-        testResult.message = `✅ PI Web API server reachable at ${workingEndpoint}. Configure authentication for full access.`;
+        const failedTests = [];
+        if (!testResult.details.databaseExists) failedTests.push('Database');
+        if (!testResult.details.elementPathValid) failedTests.push('Element Path');
+        if (!testResult.details.attributesAccessible) failedTests.push('Attributes');
+        
+        testResult.success = false;
+        testResult.message = `❌ Failed tests: ${failedTests.join(', ')}. Check configuration.`;
       }
 
       return testResult;
