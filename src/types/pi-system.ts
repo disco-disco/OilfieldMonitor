@@ -33,17 +33,20 @@ export interface WellData {
   liquidRate: number;      // Added liquid rate
   waterCut: number;
   espFrequency: number;
+  planTarget: number;      // Added plan target
   planDeviation: number;
   status: 'good' | 'warning' | 'alert';
-  lastUpdated: Date;
+  lastUpdate: Date;        // Changed from lastUpdated to lastUpdate
 }
 
 export interface WellPadData {
   name: string;
   wells: WellData[];
-  totalProduction: number;
-  averageWaterCut: number;
-  wellCount: number;
+  status: 'good' | 'warning' | 'alert';  // Added status
+  totalWells: number;      // Changed from wellCount
+  activeWells: number;     // Added active wells count
+  avgOilRate: number;      // Changed from totalProduction
+  avgWaterCut: number;     // Changed from averageWaterCut
   isConnectedToPI?: boolean; // Optional flag to indicate PI connection status
 }
 

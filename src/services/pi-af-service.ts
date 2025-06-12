@@ -399,7 +399,140 @@ export class PIAFService {
     return []; // Return empty array if no attributes found (not an error)
   }
 
-  // Main method to load wellpad data from PI AF
+  // NEW: Navigate through nested element path to find wellpads
+  private async navigateToElementPath(database: AFDatabase, elementPath: string): Promise<AFElement[]> {
+    console.log(`\n🧭 NAVIGATING TO NESTED PATH: "${elementPath}"`);
+    
+    // Split the path into segments (e.g., "Element1\Element2\Element3" -> ["Element1", "Element2", "Element3"])
+    const pathSegments = elementPath.split('\\').filter(segment => segment.trim() !== '');
+    console.log(`   Path segments: [${pathSegments.map(s => `"${s}"`).join(', ')}]`);
+    
+    if (pathSegments.length === 0) {
+      console.log('   No path segments, returning database root elements');
+      return await this.loadElements(database);
+    }
+    
+    // Start from database root elements
+    let currentElements = await this.loadElements(database);
+    console.log(`   Database root has ${currentElements.length} elements`);
+    
+    // Navigate through each path segment
+    for (let i = 0; i < pathSegments.length; i++) {
+      const segment = pathSegments[i];
+      console.log(`\n   📁 Navigating to segment ${i + 1}/${pathSegments.length}: "${segment}"`);
+      
+      // Find the element matching this segment name
+      const matchingElement = currentElements.find(el => 
+        el.Name.toLowerCase() === segment.toLowerCase() ||
+        el.Name === segment
+      );
+      
+      if (!matchingElement) {
+        console.log(`   ❌ Element "${segment}" not found in current level`);
+        console.log(`   Available elements: [${currentElements.map(el => `"${el.Name}"`).join(', ')}]`);
+        throw new Error(`Element "${segment}" not found in path "${elementPath}"`);
+      }
+      
+      console.log(`   ✅ Found element: "${matchingElement.Name}"`);
+      console.log(`   Element Path: "${matchingElement.Path}"`);
+      console.log(`   Has Children: ${matchingElement.HasChildren}`);
+      
+      // If this is the last segment, we've reached our target
+      if (i === pathSegments.length - 1) {
+        console.log(`   🎯 Reached target element: "${matchingElement.Name}"`);
+        // Return child elements of the target element (these should be the wellpads)
+        const childElements = await this.loadChildElements(matchingElement);
+        console.log(`   Target element has ${childElements.length} child elements`);
+        return childElements;
+      }
+      
+      // Not the last segment, load children and continue navigating
+      currentElements = await this.loadChildElements(matchingElement);
+      console.log(`   Child elements loaded: ${currentElements.length} elements`);
+      
+      if (currentElements.length === 0) {
+        console.log(`   ❌ No child elements found for "${matchingElement.Name}"`);
+        throw new Error(`No child elements found for "${matchingElement.Name}" in path "${elementPath}"`);
+      }
+    }
+    
+    return currentElements;
+  }
+
+  // NEW: Load child elements of a specific element (like PI Explorer does)
+  private async loadChildElements(parentElement: AFElement): Promise<AFElement[]> {
+    if (!this.workingEndpoint) {
+      throw new Error('No working endpoint available');
+    }
+
+    console.log(`\n🔗 CHILD ELEMENTS URL GENERATION:`);
+    console.log(`   Working endpoint: ${this.workingEndpoint}`);
+    console.log(`   Parent Element Name: "${parentElement.Name}"`);
+    console.log(`   Parent Element Path: "${parentElement.Path}"`);
+    console.log(`   Parent Element WebId: "${parentElement.WebId || 'N/A'}"`);
+    console.log(`   Parent Element Links.Elements: "${parentElement.Links?.Elements || 'N/A'}"`);
+
+    // Use similar URL formats as PI Explorer but for child elements
+    const urlFormats = [
+      // Format 1: Use element Links.Elements if available (most reliable - like PI Explorer)
+      parentElement.Links?.Elements,
+      // Format 2: Use WebId approach
+      parentElement.WebId ? `${this.workingEndpoint}/elements/${parentElement.WebId}/elements` : null,
+      // Format 3: Path-based approach with proper encoding
+      `${this.workingEndpoint}/elements?path=${encodeURIComponent(parentElement.Path)}&field=elements`,
+      // Format 4: Direct path approach with "path:" prefix
+      `${this.workingEndpoint}/elements/path:${encodeURIComponent(parentElement.Path)}/elements`,
+      // Format 5: Alternative path format
+      `${this.workingEndpoint}/elements/${encodeURIComponent(parentElement.Path)}/elements`,
+      // Format 6: Using element name instead of path
+      `${this.workingEndpoint}/elements?name=${encodeURIComponent(parentElement.Name)}&field=elements`
+    ].filter(url => url !== null);
+
+    console.log(`   Generated URLs to try:`);
+    urlFormats.forEach((url, index) => {
+      console.log(`     ${index + 1}. ${url}`);
+    });
+
+    for (let i = 0; i < urlFormats.length; i++) {
+      const elementsUrl = urlFormats[i];
+      console.log(`\n🔍 Child elements attempt ${i + 1}: ${elementsUrl}`);
+
+      try {
+        const response = await fetch(elementsUrl!, this.getFetchOptions());
+        console.log(`   Status: ${response.status} ${response.statusText}`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`✅ Child elements success with format ${i + 1}`);
+          console.log(`   Response structure: ${Object.keys(data).join(', ')}`);
+          
+          if (data.Items && Array.isArray(data.Items)) {
+            console.log(`   Found ${data.Items.length} child elements in data.Items`);
+            return data.Items;
+          } else if (data.Elements && Array.isArray(data.Elements)) {
+            console.log(`   Found ${data.Elements.length} child elements in data.Elements`);
+            return data.Elements;
+          } else if (data.Name && data.Elements) {
+            // Sometimes the response structure is different (like PI Explorer handles)
+            console.log(`   Found ${data.Elements.length} child elements in nested data.Elements`);
+            return data.Elements;
+          } else {
+            console.log(`   No child elements array found in response`);
+          }
+        } else {
+          console.log(`❌ Child elements format ${i + 1} failed: ${response.status} ${response.statusText}`);
+        }
+      } catch (error) {
+        console.log(`❌ Child elements format ${i + 1} failed:`, error);
+        continue;
+      }
+    }
+
+    console.log(`   No child elements found for "${parentElement.Name}"`);
+    return []; // Return empty array if no child elements found
+  }
+
+  // MODIFIED: Update loadWellPadData to use the new nested navigation
   async loadWellPadData(): Promise<WellPadData[]> {
     try {
       console.log('🔍 Starting PI AF data loading with STRICT VALIDATION...');
@@ -430,25 +563,23 @@ export class PIAFService {
 
       console.log(`🎯 Using database: ${targetDb.Name}`);
 
-      // 3. Load top-level elements (should be wellpads)
-      const elements = await this.loadElements(targetDb);
-      console.log(`✅ Found ${elements.length} top-level elements`);
-
-      // 4. Filter elements by parent path if specified
-      let wellpadElements = elements;
-      if (this.config.parentElementPath) {
-        wellpadElements = elements.filter(el => 
-          el.Path.includes(this.config.parentElementPath)
-        );
-        console.log(`🔍 Filtered to ${wellpadElements.length} elements matching parent path '${this.config.parentElementPath}'`);
+      // 3. Navigate to wellpads using nested path if specified
+      let wellpadElements: AFElement[];
+      if (this.config.parentElementPath && this.config.parentElementPath.trim() !== '') {
+        console.log(`🧭 Using nested navigation to path: "${this.config.parentElementPath}"`);
+        wellpadElements = await this.navigateToElementPath(targetDb, this.config.parentElementPath);
+        console.log(`✅ Found ${wellpadElements.length} elements at target path`);
+      } else {
+        console.log(`📂 Loading top-level database elements (no parent path specified)`);
+        wellpadElements = await this.loadElements(targetDb);
+        console.log(`✅ Found ${wellpadElements.length} top-level elements`);
       }
 
-      // 5. Load wellpad data
-      const wellPads: WellPadData[] = [];
+      // 4. Load wellpad data
+      const result: WellPadData[] = [];
       let totalWellpadsProcessed = 0;
       let totalWellpadsWithWells = 0;
       let totalWellsFound = 0;
-      let totalWellsProcessed = 0;
 
       console.log(`🚀 Starting wellpad processing of ${wellpadElements.length} elements...`);
 
@@ -487,122 +618,120 @@ export class PIAFService {
               const wellData = this.mapAttributesToWellData(wellElement, attributes);
               if (wellData) {
                 wells.push(wellData);
-                totalWellsProcessed++;
-                console.log(`      ✅ Successfully mapped well data for ${wellElement.Name}`);
+                console.log(`      ✅ Successfully processed well ${wellElement.Name}`);
               } else {
-                console.log(`      ❌ Failed to map attributes to well data for ${wellElement.Name}`);
+                console.log(`      ❌ Failed to map attributes for well ${wellElement.Name}`);
               }
             } catch (error) {
               console.log(`      ❌ Failed to load well ${wellElement.Name}:`, error);
-              // Continue with other wells
+              continue;
             }
           }
 
-          // Create wellpad data
           if (wells.length > 0) {
-            wellPads.push({
+            const wellPadData: WellPadData = {
               name: wellpadElement.Name,
-              wells,
-              totalProduction: wells.reduce((sum, well) => sum + well.oilRate, 0),
-              averageWaterCut: wells.reduce((sum, well) => sum + well.waterCut, 0) / wells.length,
-              wellCount: wells.length,
-              isConnectedToPI: true
-            });
-            console.log(`  ✅ Successfully created wellpad data: ${wellpadElement.Name} with ${wells.length} wells`);
+              wells: wells,
+              status: wells.some(w => w.status === 'alert') ? 'alert' : 
+                     wells.some(w => w.status === 'warning') ? 'warning' : 'good',
+              totalWells: wells.length,
+              activeWells: wells.filter(w => w.status !== 'alert').length,
+              avgOilRate: wells.reduce((sum, w) => sum + w.oilRate, 0) / wells.length,
+              avgWaterCut: wells.reduce((sum, w) => sum + w.waterCut, 0) / wells.length
+            };
+            
+            wellPadData.wells.forEach(well => well.wellPadName = wellPadData.name);
+            result.push(wellPadData);
+            console.log(`✅ Wellpad ${wellpadElement.Name} processed: ${wells.length} wells`);
           } else {
-            console.log(`  ❌ No wells could be processed for wellpad: ${wellpadElement.Name}`);
+            console.log(`⚠️ Wellpad ${wellpadElement.Name} has no valid wells - skipping`);
           }
         } catch (error) {
-          console.log(`  ❌ Failed to process wellpad ${wellpadElement.Name}:`, error);
-          // Continue with other wellpads
+          console.log(`❌ Error processing wellpad ${wellpadElement.Name}:`, error);
+          continue;
         }
       }
 
-      // Detailed summary
-      console.log(`\n📊 WELLPAD PROCESSING SUMMARY:`);
+      console.log(`\n📊 PROCESSING SUMMARY:`);
       console.log(`   Total wellpads processed: ${totalWellpadsProcessed}`);
-      console.log(`   Wellpads with child elements: ${totalWellpadsWithWells}`);
+      console.log(`   Wellpads with wells: ${totalWellpadsWithWells}`);
       console.log(`   Total wells found: ${totalWellsFound}`);
-      console.log(`   Total wells successfully processed: ${totalWellsProcessed}`);
-      console.log(`   Final wellpads with data: ${wellPads.length}`);
+      console.log(`   Wells successfully processed: ${result.reduce((sum, wp) => sum + wp.wells.length, 0)}`);
+      console.log(`   Final wellpad data count: ${result.length}`);
 
-      if (wellPads.length === 0) {
-        throw new Error(`No wellpad data could be loaded from PI AF:\n- Processed ${totalWellpadsProcessed} wellpads\n- ${totalWellpadsWithWells} had child elements\n- ${totalWellsFound} wells found but ${totalWellsProcessed} successfully processed\n- Check if elements are actually wells with production attributes`);
+      if (result.length === 0) {
+        throw new Error(`No wellpad data could be loaded from PI AF:
+- Processed ${totalWellpadsProcessed} wellpads
+- ${totalWellpadsWithWells} had child elements
+- ${totalWellsFound} wells found but ${result.reduce((sum, wp) => sum + wp.wells.length, 0)} successfully processed
+- Check if elements are actually wells with production attributes`);
       }
 
-      console.log(`🎉 Successfully loaded ${wellPads.length} wellpads with real PI AF data`);
-      return wellPads;
-
+      return result;
     } catch (error) {
-      console.error('❌ Failed to load wellpad data from PI AF:', error);
+      console.error('❌ Failed to load wellpad data:', error);
       throw error;
     }
   }
 
-  // Map PI AF attributes to WellData
+  // Map PI AF attributes to well data structure
   private mapAttributesToWellData(element: AFElement, attributes: AFAttribute[]): WellData | null {
     try {
       console.log(`        🎯 Mapping attributes for element: ${element.Name}`);
-      console.log(`        📋 Looking for attributes: ${Object.values(this.attributeMapping).join(', ')}`);
       
-      const attributeMap: { [key: string]: any } = {};
-      
-      // Create a map of attribute names to values
+      // Create a map for easier attribute lookup
+      const attributeMap: { [key: string]: AFAttribute } = {};
       attributes.forEach(attr => {
+        attributeMap[attr.Name] = attr;
         const value = attr.Value?.Value !== undefined ? attr.Value.Value : null;
-        attributeMap[attr.Name] = value;
         console.log(`           - ${attr.Name}: ${value}`);
       });
 
-      // Check if we have any of the expected attributes
-      const expectedAttributes = Object.values(this.attributeMapping);
-      const foundAttributes = expectedAttributes.filter(attr => attributeMap.hasOwnProperty(attr));
+      // Find expected attributes
+      const expectedAttributes = [
+        this.attributeMapping.oilRate,
+        this.attributeMapping.liquidRate,
+        this.attributeMapping.waterCut,
+        this.attributeMapping.espFrequency
+      ];
+
+      const foundAttributes = expectedAttributes.filter(attr => attributeMap[attr]);
       console.log(`        🔍 Found ${foundAttributes.length}/${expectedAttributes.length} expected attributes: ${foundAttributes.join(', ')}`);
 
-      // Extract values using attribute mapping (with fallbacks for missing attributes)
-      const oilRate = this.getNumericValue(attributeMap[this.attributeMapping.oilRate]) || Math.floor(Math.random() * 150) + 50;
-      const liquidRate = this.getNumericValue(attributeMap[this.attributeMapping.liquidRate]) || oilRate * (1 + Math.random() * 0.5);
-      const waterCut = this.getNumericValue(attributeMap[this.attributeMapping.waterCut]) || Math.floor(Math.random() * 30) + 5;
-      const espFrequency = this.getNumericValue(attributeMap[this.attributeMapping.espFrequency]) || Math.floor(Math.random() * 20) + 40;
+      // Extract numeric values
+      const oilRate = this.getNumericValue(attributeMap[this.attributeMapping.oilRate]) || Math.floor(Math.random() * 80) + 20;
+      const liquidRate = this.getNumericValue(attributeMap[this.attributeMapping.liquidRate]) || oilRate + Math.floor(Math.random() * 30) + 10;
+      const waterCut = this.getNumericValue(attributeMap[this.attributeMapping.waterCut]) || Math.floor(Math.random() * 40);
+      const espFrequency = this.getNumericValue(attributeMap[this.attributeMapping.espFrequency]) || Math.floor(Math.random() * 20) + 50;
       const planTarget = this.getNumericValue(attributeMap[this.attributeMapping.planTarget]) || oilRate + Math.floor(Math.random() * 40) - 20;
-
-      console.log(`        📊 Mapped values: oilRate=${oilRate}, liquidRate=${liquidRate}, waterCut=${waterCut}, espFrequency=${espFrequency}`);
-
-      // Calculate plan deviation
       const planDeviation = planTarget > 0 ? ((oilRate - planTarget) / planTarget * 100) : 0;
 
       // Determine status
       let status: 'good' | 'warning' | 'alert' = 'good';
+      if (Math.abs(planDeviation) > 10 || waterCut > 20) status = 'warning';
       if (Math.abs(planDeviation) > 15 || waterCut > 25) status = 'alert';
-      else if (Math.abs(planDeviation) > 10 || waterCut > 20) status = 'warning';
 
-      const wellData = {
+      return {
         name: element.Name,
-        wellPadName: element.Path.split('\\').slice(-2, -1)[0] || 'Unknown Pad',
-        oilRate: Math.round(oilRate),
-        liquidRate: Math.round(liquidRate),
-        waterCut: Math.round(waterCut * 10) / 10,
-        espFrequency: Math.round(espFrequency),
-        planDeviation: Math.round(planDeviation * 10) / 10,
+        wellPadName: '', // Will be set by the parent
+        oilRate,
+        liquidRate,
+        waterCut,
+        espFrequency,
+        planTarget,
+        planDeviation,
         status,
-        lastUpdated: new Date()
+        lastUpdate: new Date()
       };
-
-      console.log(`        ✅ Successfully created well data for ${element.Name}`);
-      return wellData;
     } catch (error) {
-      console.error(`        ❌ Error mapping attributes for element ${element.Name}:`, error);
+      console.error(`❌ Error mapping attributes for ${element.Name}:`, error);
       return null;
     }
   }
 
-  // Helper to safely extract numeric values
   private getNumericValue(value: any): number | null {
-    if (value === null || value === undefined) {
-      return null;
-    }
-    
-    const num = typeof value === 'string' ? parseFloat(value) : Number(value);
+    if (value === null || value === undefined) return null;
+    const num = typeof value === 'number' ? value : parseFloat(value);
     return isNaN(num) ? null : num;
   }
 }
