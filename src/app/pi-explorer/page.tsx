@@ -77,6 +77,41 @@ export default function PIExplorerPage() {
     return options;
   };
 
+  // Debug WebID format for PI Web API
+  const debugWebIdFormats = async (endpoint: string) => {
+    console.log('🔍 Testing WebID formats for PI Web API...');
+    
+    // Test root endpoint to understand WebID structure
+    try {
+      const response = await fetch(`${endpoint}/system`, getFetchOptions());
+      if (response.ok) {
+        const systemInfo = await response.json();
+        console.log('📋 PI Web API System Info:', systemInfo);
+      }
+    } catch (error) {
+      console.log('⚠️ Could not get system info:', error);
+    }
+
+    // Test if we can get a specific server's WebID
+    try {
+      const response = await fetch(`${endpoint}/assetservers`, getFetchOptions());
+      if (response.ok) {
+        const data = await response.json();
+        if (data.Items && data.Items.length > 0) {
+          const firstServer = data.Items[0];
+          console.log('🔗 Sample server WebID structure:', {
+            Name: firstServer.Name,
+            WebId: firstServer.WebId,
+            Path: firstServer.Path,
+            Links: Object.keys(firstServer.Links || {})
+          });
+        }
+      }
+    } catch (error) {
+      console.log('⚠️ Could not analyze WebID structure:', error);
+    }
+  };
+
   // Load configuration on mount
   useEffect(() => {
     loadConfiguration();
@@ -120,6 +155,10 @@ export default function PIExplorerPage() {
         if (response.ok || response.status === 401) {
           setWorkingEndpoint(endpoint);
           console.log(`✅ Working endpoint found: ${endpoint}`);
+          
+          // Debug WebID formats when we find a working endpoint
+          await debugWebIdFormats(endpoint);
+          
           return endpoint;
         }
       } catch (error) {
@@ -144,31 +183,118 @@ export default function PIExplorerPage() {
     setErrors({ ...errors, databases: undefined });
 
     try {
-      // Try to get all databases from AF Server
-      const dbUrl = `${endpoint}/assetservers/name:${encodeURIComponent(config.afServerName)}/assetdatabases`;
-      console.log(`🔍 Getting databases from: ${dbUrl}`);
+      // Try multiple URL formats for getting databases
+      const urlFormats = [
+        // Format 1: Get all asset servers first (most reliable)
+        `${endpoint}/assetservers`,
+        // Format 2: Try without name prefix (direct path)
+        `${endpoint}/assetservers/${encodeURIComponent(config.afServerName)}/assetdatabases`,
+        // Format 3: Try with path parameter (double backslashes for UNC path)
+        `${endpoint}/assetdatabases?path=\\\\${encodeURIComponent(config.afServerName)}`,
+        // Format 4: Get all databases and filter
+        `${endpoint}/assetdatabases`,
+        // Format 5: Try WebID format (proper PI Web API WebID structure)
+        `${endpoint}/assetservers?name=${encodeURIComponent(config.afServerName)}`,
+        // Format 6: Try direct server path without WebID prefix
+        `${endpoint}/assetservers/${config.afServerName}/assetdatabases`
+      ];
 
-      const response = await fetch(dbUrl, getFetchOptions());
+      let successfulResponse = null;
+      let lastError = null;
 
-      console.log(`   Database list status: ${response.status}`);
+      for (let i = 0; i < urlFormats.length; i++) {
+        const dbUrl = urlFormats[i];
+        console.log(`🔍 Attempt ${i + 1}: Getting databases from: ${dbUrl}`);
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Databases retrieved:', data);
-        
-        if (data.Items) {
-          setDatabases(data.Items);
-        } else {
-          setErrors({ databases: 'No databases found in response' });
+        try {
+          const response = await fetch(dbUrl, getFetchOptions());
+          console.log(`   Status: ${response.status} ${response.statusText}`);
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log(`✅ Success with format ${i + 1}:`, data);
+            
+            if (i === 0 || i === 4) {
+              // Format 1 & 5: We got all asset servers, find our specific server
+              if (data.Items) {
+                const ourServer = data.Items.find((server: any) => 
+                  server.Name === config.afServerName || 
+                  server.Name.toLowerCase() === config.afServerName.toLowerCase()
+                );
+                if (ourServer && ourServer.Links && ourServer.Links.Databases) {
+                  console.log(`🎯 Found target server: ${ourServer.Name}, getting databases...`);
+                  // Try to get databases from the found server
+                  const serverDbResponse = await fetch(ourServer.Links.Databases, getFetchOptions());
+                  if (serverDbResponse.ok) {
+                    const serverDbData = await serverDbResponse.json();
+                    successfulResponse = serverDbData;
+                    break;
+                  } else {
+                    console.log(`❌ Failed to get databases from server link: ${serverDbResponse.status}`);
+                    continue;
+                  }
+                } else {
+                  console.log(`⚠️ Server '${config.afServerName}' not found in server list`);
+                  console.log('Available servers:', data.Items?.map((s: any) => s.Name));
+                  lastError = `AF Server '${config.afServerName}' not found. Available: ${data.Items?.map((s: any) => s.Name).join(', ')}`;
+                  continue;
+                }
+              }
+            } else if (i === 3) {
+              // Format 4: We got all databases, need to filter by our server
+              if (data.Items) {
+                const filteredDatabases = data.Items.filter((db: any) => 
+                  db.Path && db.Path.includes(`\\\\${config.afServerName}\\`)
+                );
+                if (filteredDatabases.length > 0) {
+                  successfulResponse = { Items: filteredDatabases };
+                  break;
+                } else {
+                  lastError = `No databases found for server '${config.afServerName}' in global database list`;
+                  continue;
+                }
+              }
+            } else {
+              // Formats 2, 3, 6: Direct database response
+              successfulResponse = data;
+              break;
+            }
+          } else if (response.status === 401) {
+            setErrors({ databases: 'Authentication required (401) - but server is reachable' });
+            return;
+          } else if (response.status === 400) {
+            const errorText = await response.text();
+            console.log(`❌ Format ${i + 1} failed with 400:`, errorText);
+            lastError = `Format ${i + 1} Error 400: ${errorText}`;
+            continue; // Try next format
+          } else if (response.status === 404) {
+            console.log(`❌ Format ${i + 1} failed with 404 - trying next format`);
+            lastError = `AF Server '${config.afServerName}' not found (404)`;
+            continue; // Try next format
+          } else {
+            const errorText = await response.text();
+            console.log(`❌ Format ${i + 1} failed with ${response.status}:`, errorText);
+            lastError = `Error ${response.status}: ${errorText}`;
+            continue; // Try next format
+          }
+        } catch (fetchError) {
+          console.log(`❌ Format ${i + 1} network error:`, fetchError);
+          lastError = `Network error: ${fetchError}`;
+          continue; // Try next format
         }
-      } else if (response.status === 401) {
-        setErrors({ databases: 'Authentication required (401) - but server is reachable' });
-      } else if (response.status === 404) {
-        setErrors({ databases: `AF Server '${config.afServerName}' not found (404)` });
-      } else {
-        const errorText = await response.text();
-        setErrors({ databases: `Error ${response.status}: ${errorText}` });
       }
+
+      if (successfulResponse) {
+        if (successfulResponse.Items && successfulResponse.Items.length > 0) {
+          setDatabases(successfulResponse.Items);
+          console.log(`✅ Found ${successfulResponse.Items.length} databases`);
+        } else {
+          setErrors({ databases: 'No databases found in response (empty Items array)' });
+        }
+      } else {
+        setErrors({ databases: `All URL formats failed. Last error: ${lastError}` });
+      }
+      
     } catch (error) {
       console.error('Database loading failed:', error);
       setErrors({ databases: `Network error: ${error}` });
