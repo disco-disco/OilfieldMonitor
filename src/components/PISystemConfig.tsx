@@ -104,6 +104,82 @@ export default function PISystemConfig({ onConfigured }: PIConfigProps) {
     }
   };
 
+  const handleSaveConfiguration = async () => {
+    // Validate required fields based on mode
+    if (!config.piWebApiServerName) {
+      setTestResult({ success: false, message: 'PI Web API Server Name is required' });
+      return;
+    }
+
+    if (mode === 'production') {
+      if (!config.afServerName) {
+        setTestResult({ success: false, message: 'PI AF Server Name is required for production mode' });
+        return;
+      }
+      if (!config.afDatabaseName) {
+        setTestResult({ success: false, message: 'AF Database Name is required for production mode' });
+        return;
+      }
+      if (!config.parentElementPath) {
+        setTestResult({ success: false, message: 'Parent Element Path is required for production mode' });
+        return;
+      }
+    }
+
+    setIsLoading(true);
+    setTestResult(null);
+
+    try {
+      console.log('💾 Saving PI System configuration...');
+      console.log('   Mode:', mode);
+      console.log('   AF Server:', config.afServerName);
+      console.log('   Web API Server:', config.piWebApiServerName);
+      console.log('   Database:', config.afDatabaseName);
+
+      const response = await fetch('/api/pi-system/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          config,
+          attributeMapping,
+          mode
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        console.log('✅ Configuration saved successfully');
+        setTestResult({ 
+          success: true, 
+          message: `✅ Configuration saved successfully in ${mode} mode!`,
+          mode 
+        });
+        
+        // Call the callback to notify parent component
+        setTimeout(() => {
+          onConfigured();
+        }, 1000);
+      } else {
+        console.error('❌ Failed to save configuration:', result.message);
+        setTestResult({ 
+          success: false, 
+          message: result.message || 'Failed to save configuration' 
+        });
+      }
+    } catch (error) {
+      console.error('❌ Save configuration error:', error);
+      setTestResult({ 
+        success: false, 
+        message: 'Network error while saving configuration' 
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleTestConnection = async () => {
     // Validate required fields based on mode
     if (!config.piWebApiServerName) {
@@ -584,7 +660,8 @@ export default function PISystemConfig({ onConfigured }: PIConfigProps) {
         {/* Action Buttons */}
         <div className="flex gap-4 pt-6 border-t border-slate-200 dark:border-slate-600">
           <button
-            type="submit"
+            type="button"
+            onClick={handleSaveConfiguration}
             disabled={isLoading}
             className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
           >
