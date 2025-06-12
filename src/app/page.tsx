@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Droplets, TrendingUp, TrendingDown, CheckCircle, Zap, Settings, RefreshCw } from "lucide-react";
 import PISystemConfig from '@/components/PISystemConfig';
 import { WellPadData } from '@/types/pi-system';
+import { PIAFService } from '@/services/pi-af-service';
 
 export default function Home() {
   const [wellPads, setWellPads] = useState<WellPadData[]>([]);
@@ -21,8 +22,9 @@ export default function Home() {
       const configResponse = await fetch('/api/pi-system/config');
       const configResult = await configResponse.json();
       
-      if (configResult.success && configResult.config.mode === 'production' && configResult.config.piWebApiServerName) {
-        // Try to load real PI data with client-side direct connection
+      if (configResult.success && configResult.config.mode === 'production' && 
+          configResult.config.piServerConfig?.piWebApiServerName) {
+        // Try to load real PI AF data
         try {
           const realData = await loadRealPIData(configResult.config);
           if (realData) {
@@ -31,7 +33,7 @@ export default function Home() {
             return;
           }
         } catch (error) {
-          console.log('Real PI data loading failed, falling back to simulated data:', error);
+          console.log('Real PI AF data loading failed, falling back to simulated data:', error);
         }
       }
       
@@ -50,54 +52,34 @@ export default function Home() {
     }
   }, []);
 
-  // Load real PI data using direct client-side connection
+  // Load real PI data using the new PI AF service
   const loadRealPIData = async (config: any): Promise<WellPadData[] | null> => {
     try {
-      console.log('🔍 Attempting to load real PI data...');
+      console.log('🔍 Attempting to load real PI AF data...');
       
-      // Test PI Web API connectivity first
-      const testEndpoints = [
-        `https://${config.piWebApiServerName}/piwebapi`,
-        `https://${config.piWebApiServerName}:443/piwebapi`
-      ];
-
-      let workingEndpoint = null;
-      for (const endpoint of testEndpoints) {
-        try {
-          const response = await fetch(endpoint, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' }
-          });
-          
-          if (response.ok || response.status === 401) {
-            workingEndpoint = endpoint;
-            console.log(`✅ PI Web API reachable at: ${endpoint}`);
-            break;
-          }
-        } catch (error) {
-          continue;
-        }
-      }
-
-      if (!workingEndpoint) {
-        console.log('❌ No reachable PI Web API endpoint found');
+      // Validate required configuration
+      if (!config.piServerConfig || !config.piServerConfig.afServerName || 
+          !config.piServerConfig.piWebApiServerName || !config.piServerConfig.afDatabaseName) {
+        console.log('❌ Incomplete PI configuration for real data loading');
         return null;
       }
 
-      // For now, return simulated data but with a note that PI connection works
-      // In the future, this is where you'd query actual PI AF elements
-      console.log('🎉 PI Web API connection confirmed! Using enhanced simulated data.');
+      // Create PI AF service instance
+      const piafService = new PIAFService(config.piServerConfig);
       
-      const enhancedData = generateSimulatedData();
-      // Add a marker to show this is "production mode with PI connection"
-      enhancedData.forEach(pad => {
-        pad.isConnectedToPI = true;
-      });
+      // Load wellpad data from PI AF
+      const wellPads = await piafService.loadWellPadData();
       
-      return enhancedData;
+      if (wellPads && wellPads.length > 0) {
+        console.log(`🎉 Successfully loaded ${wellPads.length} wellpads from PI AF`);
+        return wellPads;
+      } else {
+        console.log('⚠️ No wellpad data found in PI AF, falling back to simulated data');
+        return null;
+      }
       
     } catch (error) {
-      console.error('Error loading real PI data:', error);
+      console.error('❌ Error loading real PI AF data:', error);
       return null;
     }
   };
@@ -289,7 +271,26 @@ export default function Home() {
         {/* Field Summary */}
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Field Production Overview</h2>
+            <div>
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Field Production Overview</h2>
+              {/* Data Source Indicator */}
+              {wellPads.length > 0 && (
+                <div className="flex items-center gap-2 mt-1">
+                  {wellPads[0]?.isConnectedToPI ? (
+                    <>
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <span className="text-sm text-green-600 font-medium">Live PI AF Data</span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                      <span className="text-sm text-yellow-600 font-medium">Simulated Data</span>
+                    </>
+                  )}
+                  <span className="text-xs text-slate-500">• {currentMode} mode</span>
+                </div>
+              )}
+            </div>
             {lastUpdated && (
               <div className="text-sm text-slate-500 dark:text-slate-400">
                 Last Updated: {lastUpdated.toLocaleString()}

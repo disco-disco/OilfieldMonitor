@@ -515,7 +515,10 @@ export default function PIExplorerPage() {
           setSelectedElement(elemPath);
           console.log(`✅ Found ${successfulResponse.Items.length} attributes for element '${selectedEl?.Name || elemPath}'`);
         } else {
-          setErrors({ attributes: `No attributes found for element '${selectedEl?.Name || elemPath}' (empty Items array)` });
+          // 0 attributes is normal, not an error
+          setAttributes([]);
+          setSelectedElement(elemPath);
+          console.log(`ℹ️ Element '${selectedEl?.Name || elemPath}' has no attributes (this is normal)`);
         }
       } else {
         setErrors({ attributes: `All URL formats failed. Last error: ${lastError}` });
