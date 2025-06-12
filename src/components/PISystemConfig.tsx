@@ -497,31 +497,17 @@ export default function PISystemConfig({ onConfigured }: PIConfigProps) {
               </div>
             </div>
 
-            {/* Authentication (Optional) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Username (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={config.username}
-                  onChange={(e) => setConfig({ ...config, username: e.target.value })}
-                  placeholder="Domain\\Username"
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Password (Optional)
-                </label>
-                <input
-                  type="password"
-                  value={config.password}
-                  onChange={(e) => setConfig({ ...config, password: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
-                />
+            {/* Windows Authentication Notice */}
+            <div className="col-span-2">
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-blue-600" />
+                  <h4 className="font-semibold text-blue-800 dark:text-blue-200">Windows Authentication Enabled</h4>
+                </div>
+                <p className="text-sm text-blue-700 dark:text-blue-300 mt-2">
+                  This system uses Windows Authentication automatically with your current login credentials. 
+                  No username/password configuration required. Deploy on a Windows domain machine for optimal performance.
+                </p>
               </div>
             </div>
           </>
