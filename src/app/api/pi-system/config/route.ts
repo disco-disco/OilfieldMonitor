@@ -12,9 +12,9 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validate required fields
-    if (!config.afServerName || !config.afDatabaseName || !config.parentElementPath) {
+    if (!config.afServerName || !config.piWebApiServerName || !config.afDatabaseName || !config.parentElementPath) {
       return NextResponse.json(
-        { success: false, message: 'Missing required configuration fields' },
+        { success: false, message: 'Missing required configuration fields (AF Server, PI Web API Server, Database, Element Path)' },
         { status: 400 }
       );
     }

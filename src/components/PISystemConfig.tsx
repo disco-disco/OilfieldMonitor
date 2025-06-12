@@ -22,6 +22,7 @@ export default function PISystemConfig({ onConfigured }: PIConfigProps) {
   const [mode, setMode] = useState<'development' | 'production'>('development');
   const [config, setConfig] = useState<PIServerConfig>({
     afServerName: '',
+    piWebApiServerName: '',
     afDatabaseName: '',
     parentElementPath: '',
     templateName: '',
@@ -234,6 +235,26 @@ export default function PISystemConfig({ onConfigured }: PIConfigProps) {
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  <Server className="w-4 h-4 inline mr-2" />
+                  PI Web API Server Name *
+                </label>
+                <input
+                  type="text"
+                  value={config.piWebApiServerName}
+                  onChange={(e) => setConfig({ ...config, piWebApiServerName: e.target.value })}
+                  placeholder="e.g., SRV-PIV0101 (PI Vision Server)"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                  required={mode === 'production'}
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Server hosting PI Web API (often PI Vision server)
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   <Database className="w-4 h-4 inline mr-2" />

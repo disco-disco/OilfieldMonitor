@@ -2,6 +2,7 @@
 
 export interface PIServerConfig {
   afServerName: string;
+  piWebApiServerName: string; // Separate field for PI Web API server
   afDatabaseName: string;
   parentElementPath: string;
   templateName: string;

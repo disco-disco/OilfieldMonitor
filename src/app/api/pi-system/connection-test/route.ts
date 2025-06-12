@@ -39,12 +39,12 @@ async function testPIServerConnection(config: PIServerConfig) {
   };
 
   try {
-    // Test 1: Server reachability
-    console.log(`Step 1: Testing server reachability for ${config.afServerName}`);
-    result.details.serverReachable = await testServerReachability(config.afServerName);
+    // Test 1: Server reachability (PI Web API Server)
+    console.log(`Step 1: Testing PI Web API server reachability for ${config.piWebApiServerName}`);
+    result.details.serverReachable = await testServerReachability(config.piWebApiServerName);
     
     if (!result.details.serverReachable) {
-      result.message = `Cannot reach PI AF Server: ${config.afServerName}`;
+      result.message = `Cannot reach PI Web API Server: ${config.piWebApiServerName}`;
       return result;
     }
 
@@ -137,10 +137,10 @@ async function testServerReachability(serverName: string): Promise<boolean> {
 
 async function testDatabaseExists(config: PIServerConfig): Promise<boolean> {
   const possibleEndpoints = [
-    `https://${config.afServerName}/piwebapi`,
-    `https://${config.afServerName}:443/piwebapi`,
-    `http://${config.afServerName}/piwebapi`,
-    `http://${config.afServerName}:5985/piwebapi`
+    `https://${config.piWebApiServerName}/piwebapi`,
+    `https://${config.piWebApiServerName}:443/piwebapi`,
+    `http://${config.piWebApiServerName}/piwebapi`,
+    `http://${config.piWebApiServerName}:5985/piwebapi`
   ];
 
   for (const baseEndpoint of possibleEndpoints) {
@@ -210,10 +210,10 @@ async function testDatabaseExists(config: PIServerConfig): Promise<boolean> {
 
 async function testElementPath(config: PIServerConfig): Promise<boolean> {
   const possibleEndpoints = [
-    `https://${config.afServerName}/piwebapi`,
-    `https://${config.afServerName}:443/piwebapi`,
-    `http://${config.afServerName}/piwebapi`,
-    `http://${config.afServerName}:5985/piwebapi`
+    `https://${config.piWebApiServerName}/piwebapi`,
+    `https://${config.piWebApiServerName}:443/piwebapi`,
+    `http://${config.piWebApiServerName}/piwebapi`,
+    `http://${config.piWebApiServerName}:5985/piwebapi`
   ];
 
   for (const baseEndpoint of possibleEndpoints) {
@@ -262,10 +262,10 @@ async function testElementPath(config: PIServerConfig): Promise<boolean> {
 
 async function testAttributeAccess(config: PIServerConfig): Promise<boolean> {
   const possibleEndpoints = [
-    `https://${config.afServerName}/piwebapi`,
-    `https://${config.afServerName}:443/piwebapi`,
-    `http://${config.afServerName}/piwebapi`,
-    `http://${config.afServerName}:5985/piwebapi`
+    `https://${config.piWebApiServerName}/piwebapi`,
+    `https://${config.piWebApiServerName}:443/piwebapi`,
+    `http://${config.piWebApiServerName}/piwebapi`,
+    `http://${config.piWebApiServerName}:5985/piwebapi`
   ];
 
   for (const baseEndpoint of possibleEndpoints) {

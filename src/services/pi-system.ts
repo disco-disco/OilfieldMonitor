@@ -85,11 +85,11 @@ export class PISystemService {
     };
 
     try {
-      // Test 1: Server reachability
-      result.details!.serverReachable = await this.testServerReachability(config.afServerName);
+      // Test 1: Server reachability (PI Web API Server)
+      result.details!.serverReachable = await this.testServerReachability(config.piWebApiServerName);
       
       if (!result.details!.serverReachable) {
-        result.message = `Cannot reach PI AF Server: ${config.afServerName}`;
+        result.message = `Cannot reach PI Web API Server: ${config.piWebApiServerName}`;
         return result;
       }
 
@@ -196,12 +196,12 @@ export class PISystemService {
     try {
       console.log(`Testing database existence: ${config.afDatabaseName}`);
       
-      // Try to get the PI Web API endpoint for the server
+      // Use PI Web API server for endpoints
       const possibleEndpoints = [
-        `https://${config.afServerName}/piwebapi`,
-        `https://${config.afServerName}:443/piwebapi`,
-        `http://${config.afServerName}/piwebapi`,
-        `http://${config.afServerName}:5985/piwebapi`
+        `https://${config.piWebApiServerName}/piwebapi`,
+        `https://${config.piWebApiServerName}:443/piwebapi`,
+        `http://${config.piWebApiServerName}/piwebapi`,
+        `http://${config.piWebApiServerName}:5985/piwebapi`
       ];
 
       for (const baseEndpoint of possibleEndpoints) {
@@ -294,10 +294,10 @@ export class PISystemService {
       console.log(`Testing element path: ${config.parentElementPath}`);
       
       const possibleEndpoints = [
-        `https://${config.afServerName}/piwebapi`,
-        `https://${config.afServerName}:443/piwebapi`,
-        `http://${config.afServerName}/piwebapi`,
-        `http://${config.afServerName}:5985/piwebapi`
+        `https://${config.piWebApiServerName}/piwebapi`,
+        `https://${config.piWebApiServerName}:443/piwebapi`,
+        `http://${config.piWebApiServerName}/piwebapi`,
+        `http://${config.piWebApiServerName}:5985/piwebapi`
       ];
 
       for (const baseEndpoint of possibleEndpoints) {
@@ -371,10 +371,10 @@ export class PISystemService {
       console.log('Testing attribute accessibility');
       
       const possibleEndpoints = [
-        `https://${config.afServerName}/piwebapi`,
-        `https://${config.afServerName}:443/piwebapi`,
-        `http://${config.afServerName}/piwebapi`,
-        `http://${config.afServerName}:5985/piwebapi`
+        `https://${config.piWebApiServerName}/piwebapi`,
+        `https://${config.piWebApiServerName}:443/piwebapi`,
+        `http://${config.piWebApiServerName}/piwebapi`,
+        `http://${config.piWebApiServerName}:5985/piwebapi`
       ];
 
       for (const baseEndpoint of possibleEndpoints) {
