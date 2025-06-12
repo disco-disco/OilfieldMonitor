@@ -68,12 +68,23 @@ Tests multiple PI Web API endpoints in order:
 1. **Open the dashboard** at `http://localhost:3000`
 2. **Click the Settings button** to open PI System Configuration
 3. **Switch to Production mode** (important - development mode uses simulated data)
-4. **Enter your PI AF server details:**
-   - **AF Server Name**: Your PI AF server hostname or IP
-   - **AF Database Name**: Your PI AF database name
-   - **Parent Element Path**: Path to your wellpad parent element
-   - **Template Name**: Your wellpad template name (optional)
+4. **Enter your PI system details:**
+   - **AF Server Name**: Your PI AF server hostname (e.g., `PIAF-SERVER01`)
+   - **PI Web API Server Name**: Server hosting PI Web API (e.g., `SRV-PIV0101` - often the PI Vision server)
+   - **AF Database Name**: Your PI AF database name (e.g., `WWDB`)
+   - **Parent Element Path**: Path to your wellpad parent element (e.g., `\\WWDB\\SLM\\WellPads\\102\\`)
+   - **Template Name**: Your wellpad template name (e.g., `Well`)
 5. **Click "Test Connection"**
+
+### Important: Separate PI Web API Server Configuration
+
+**NEW FEATURE**: The system now supports separate configuration for:
+- **PI AF Server**: Hosts the Asset Framework database and elements
+- **PI Web API Server**: Provides the REST API interface (commonly hosted on PI Vision server)
+
+This addresses the common enterprise setup where:
+- PI AF Server: `PIAF-SERVER01` (Asset Framework)
+- PI Web API Server: `SRV-PIV0101` (PI Vision server with Web API)
 
 ### Expected Results
 
@@ -90,10 +101,31 @@ Tests multiple PI Web API endpoints in order:
 ### Troubleshooting
 
 #### No Network Traffic in PI Network Manager
-- Verify PI Web API is installed and running
-- Check firewall settings
-- Confirm the server name/IP is correct
+- Verify PI Web API is installed and running **on the PI Web API server** (not necessarily the AF server)
+- Check firewall settings on the **PI Web API server**
+- Confirm the **PI Web API server name** is correct (e.g., `SRV-PIV0101`)
 - Try different ports if default doesn't work
+
+#### Common Configuration Issues
+
+**Problem**: "Failed to connect" but server is reachable from browser
+**Solution**: Ensure you're using the correct **PI Web API Server Name** field
+- ✅ **Correct**: PI Web API Server Name = `SRV-PIV0101` (PI Vision server)
+- ❌ **Incorrect**: Using AF server name for PI Web API endpoints
+
+**Problem**: "fetch failed" errors in logs
+**Cause**: PI Web API hosted on different server than PI AF
+**Solution**: 
+1. Set **AF Server Name** to your Asset Framework server
+2. Set **PI Web API Server Name** to your PI Vision/Web API server
+3. These are often different servers in enterprise environments
+
+#### Your Configuration Example:
+Based on your setup:
+- **AF Server Name**: `MES-PIAF01CPF` (or actual AF server)
+- **PI Web API Server Name**: `SRV-PIV0101` (PI Vision server)
+- **AF Database Name**: `WWDB`
+- **Parent Element Path**: `\\WWDB\\SLM\\WellPads\\102\\`
 
 #### Authentication Errors (401)
 - This is actually **expected** and indicates the server is reachable
