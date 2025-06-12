@@ -58,6 +58,110 @@ export class PIAFService {
     };
   }
 
+  // STRICT validation - only return success if EVERYTHING works
+  async validateConfiguration(): Promise<{ isValid: boolean; error?: string; details?: string }> {
+    try {
+      console.log('🔍 STRICT VALIDATION: Starting comprehensive PI AF configuration validation...');
+
+      // Step 1: Validate PI Web API connectivity
+      const endpoint = await this.findWorkingEndpoint();
+      if (!endpoint) {
+        return { 
+          isValid: false, 
+          error: 'PI Web API server unreachable',
+          details: `Cannot connect to PI Web API at ${this.config.piWebApiServerName}`
+        };
+      }
+
+      // Step 2: Validate AF Server exists
+      const databases = await this.loadDatabases();
+      if (databases.length === 0) {
+        return { 
+          isValid: false, 
+          error: 'AF Server not found or no databases accessible',
+          details: `AF Server '${this.config.afServerName}' not found or has no accessible databases`
+        };
+      }
+
+      // Step 3: Validate specific database exists
+      const targetDb = databases.find(db => 
+        db.Name === this.config.afDatabaseName ||
+        db.Name.toLowerCase() === this.config.afDatabaseName.toLowerCase()
+      );
+
+      if (!targetDb) {
+        return { 
+          isValid: false, 
+          error: 'AF Database not found',
+          details: `Database '${this.config.afDatabaseName}' not found. Available databases: ${databases.map(d => d.Name).join(', ')}`
+        };
+      }
+
+      // Step 4: Validate database has elements
+      const elements = await this.loadElements(targetDb);
+      if (elements.length === 0) {
+        return { 
+          isValid: false, 
+          error: 'No elements found in database',
+          details: `Database '${this.config.afDatabaseName}' contains no accessible elements`
+        };
+      }
+
+      // Step 5: If parent element path specified, validate it exists
+      if (this.config.parentElementPath) {
+        const parentElements = elements.filter(el => 
+          el.Path.includes(this.config.parentElementPath) || 
+          el.Name === this.config.parentElementPath
+        );
+        if (parentElements.length === 0) {
+          return { 
+            isValid: false, 
+            error: 'Parent element path not found',
+            details: `Parent element path '${this.config.parentElementPath}' not found in database '${this.config.afDatabaseName}'`
+          };
+        }
+      }
+
+      // Step 6: Try to load at least one element's children (wellpad -> wells)
+      let foundValidWellpad = false;
+      for (const element of elements.slice(0, 3)) { // Test first 3 elements
+        try {
+          const childElements = await this.loadElements(element);
+          if (childElements.length > 0) {
+            console.log(`✅ Found ${childElements.length} child elements in '${element.Name}'`);
+            foundValidWellpad = true;
+            break;
+          }
+        } catch (error) {
+          console.log(`⚠️ Could not load children for element '${element.Name}':`, error);
+          continue;
+        }
+      }
+
+      if (!foundValidWellpad) {
+        return { 
+          isValid: false, 
+          error: 'No accessible wellpad structure found',
+          details: `No elements in database '${this.config.afDatabaseName}' have accessible child elements (wells)`
+        };
+      }
+
+      console.log('🎉 STRICT VALIDATION PASSED: All PI AF components are accessible');
+      return { 
+        isValid: true, 
+        details: `Successfully validated AF Server '${this.config.afServerName}', Database '${this.config.afDatabaseName}', and wellpad structure`
+      };
+
+    } catch (error) {
+      console.error('❌ STRICT VALIDATION FAILED:', error);
+      return { 
+        isValid: false, 
+        error: 'Validation failed with error',
+        details: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
   // Test PI Web API connectivity and find working endpoint
   private async findWorkingEndpoint(): Promise<string | null> {
     if (this.workingEndpoint) {
@@ -242,13 +346,23 @@ export class PIAFService {
   // Main method to load wellpad data from PI AF
   async loadWellPadData(): Promise<WellPadData[]> {
     try {
-      console.log('🔍 Loading wellpad data from PI AF...');
+      console.log('🔍 Starting PI AF data loading with STRICT VALIDATION...');
       
-      // 1. Load databases
+      // STRICT VALIDATION FIRST - Only proceed if everything is valid
+      const validation = await this.validateConfiguration();
+      if (!validation.isValid) {
+        console.error('❌ STRICT VALIDATION FAILED:', validation.error);
+        console.error('   Details:', validation.details);
+        throw new Error(`PI AF Configuration Validation Failed: ${validation.error}. ${validation.details}`);
+      }
+      
+      console.log('✅ STRICT VALIDATION PASSED - Proceeding with data loading...');
+      
+      // 1. Load databases (already validated, but get fresh data)
       const databases = await this.loadDatabases();
       console.log(`✅ Found ${databases.length} databases`);
 
-      // 2. Find the target database
+      // 2. Find the target database (already validated)
       const targetDb = databases.find(db => 
         db.Name === this.config.afDatabaseName ||
         db.Name.toLowerCase() === this.config.afDatabaseName.toLowerCase()
@@ -318,6 +432,10 @@ export class PIAFService {
           console.log(`  ⚠️ Failed to process wellpad ${wellpadElement.Name}:`, error);
           // Continue with other wellpads
         }
+      }
+
+      if (wellPads.length === 0) {
+        throw new Error('No wellpad data could be loaded from PI AF - all wellpads failed to process');
       }
 
       console.log(`🎉 Successfully loaded ${wellPads.length} wellpads with real PI AF data`);
