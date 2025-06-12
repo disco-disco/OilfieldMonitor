@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Droplets, TrendingUp, TrendingDown, CheckCircle, Zap, Settings, RefreshCw } from "lucide-react";
 import PISystemConfig from '@/components/PISystemConfig';
-import { WellPadData } from '@/types/pi-system';
+import { WellPadData, WellData } from '@/types/pi-system';
 import { PIAFService } from '@/services/pi-af-service';
 
 export default function Home() {
@@ -111,7 +111,7 @@ export default function Home() {
     
     for (let padNum = 1; padNum <= 10; padNum++) {
       const wellCount = Math.floor(Math.random() * 11) + 10;
-      const wells = [];
+      const wells: WellData[] = [];
       
       for (let wellNum = 0; wellNum < wellCount; wellNum++) {
         const wellNumber = Math.floor(Math.random() * 900) + 100;
@@ -133,18 +133,22 @@ export default function Home() {
           liquidRate,
           waterCut,
           espFrequency,
+          planTarget, // Added missing planTarget
           planDeviation: Math.round(deviation * 10) / 10,
           status,
-          lastUpdated: new Date()
+          lastUpdate: new Date() // Fixed: lastUpdate instead of lastUpdated
         });
       }
       
       wellPads.push({
         name: `WellPad ${padNum.toString().padStart(2, '0')}`,
         wells,
-        totalProduction: wells.reduce((sum, well) => sum + well.oilRate, 0),
-        averageWaterCut: wells.reduce((sum, well) => sum + well.waterCut, 0) / wells.length,
-        wellCount: wells.length
+        status: wells.some(w => w.status === 'alert') ? 'alert' : 
+               wells.some(w => w.status === 'warning') ? 'warning' : 'good',
+        totalWells: wells.length, // Fixed: totalWells instead of wellCount
+        activeWells: wells.filter(w => w.status !== 'alert').length, // Added activeWells
+        avgOilRate: wells.reduce((sum, well) => sum + well.oilRate, 0) / wells.length, // Fixed: avgOilRate instead of totalProduction
+        avgWaterCut: Math.round(wells.reduce((sum, well) => sum + well.waterCut, 0) / wells.length) // Fixed: avgWaterCut instead of averageWaterCut
       });
     }
     
@@ -343,13 +347,13 @@ export default function Home() {
             <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
               <div className="text-sm text-slate-500 dark:text-slate-400">Total Wells</div>
               <div className="text-2xl font-bold text-slate-900 dark:text-white">
-                {wellPads.reduce((sum, pad) => sum + pad.wellCount, 0)}
+                {wellPads.reduce((sum, pad) => sum + pad.totalWells, 0)}
               </div>
             </div>
             <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
               <div className="text-sm text-slate-500 dark:text-slate-400">Total Production</div>
               <div className="text-2xl font-bold text-blue-600">
-                {Math.round(wellPads.reduce((sum, pad) => sum + pad.totalProduction, 0)).toLocaleString()}
+                {Math.round(wellPads.reduce((sum, pad) => sum + (pad.avgOilRate * pad.totalWells), 0)).toLocaleString()}
               </div>
               <div className="text-xs text-slate-500 dark:text-slate-400">bbl/day</div>
             </div>
@@ -360,7 +364,7 @@ export default function Home() {
             <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
               <div className="text-sm text-slate-500 dark:text-slate-400">Avg Water Cut</div>
               <div className="text-2xl font-bold text-orange-600">
-                {wellPads.length > 0 ? Math.round(wellPads.reduce((sum, pad) => sum + pad.averageWaterCut, 0) / wellPads.length) : 0}%
+                {wellPads.length > 0 ? Math.round(wellPads.reduce((sum, pad) => sum + pad.avgWaterCut, 0) / wellPads.length) : 0}%
               </div>
             </div>
           </div>
@@ -379,10 +383,10 @@ export default function Home() {
                       {wellPad.wells.length} wells
                     </span>
                     <span className="text-sm text-blue-600 font-medium">
-                      {Math.round(wellPad.totalProduction).toLocaleString()} bbl/day
+                      {Math.round(wellPad.avgOilRate * wellPad.totalWells).toLocaleString()} bbl/day
                     </span>
                     <span className="text-sm text-orange-600">
-                      {Math.round(wellPad.averageWaterCut)}% water cut
+                      {Math.round(wellPad.avgWaterCut)}% water cut
                     </span>
                   </div>
                 </div>
