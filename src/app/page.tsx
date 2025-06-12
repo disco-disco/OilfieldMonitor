@@ -13,10 +13,14 @@ export default function Home() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isPIConfigured, setIsPIConfigured] = useState(false);
   const [currentMode, setCurrentMode] = useState<'development' | 'production'>('development');
+  const [dataSource, setDataSource] = useState<'pi-af' | 'simulated' | 'unknown'>('unknown');
+  const [lastPIError, setLastPIError] = useState<string | null>(null);
 
   // Load wellpad data
   const loadWellPadData = useCallback(async () => {
     setIsLoading(true);
+    setLastPIError(null); // Clear previous errors
+    
     try {
       // Check if we have a working PI configuration first
       const configResponse = await fetch('/api/pi-system/config');
@@ -24,27 +28,44 @@ export default function Home() {
       
       if (configResult.success && configResult.config.mode === 'production' && 
           configResult.config.piServerConfig?.piWebApiServerName) {
+        
+        console.log('🔍 Production mode detected - attempting PI AF data loading...');
+        
         // Try to load real PI AF data
         try {
           const realData = await loadRealPIData(configResult.config);
-          if (realData) {
+          if (realData && realData.length > 0) {
+            console.log('✅ SUCCESS: Real PI AF data loaded successfully');
             setWellPads(realData);
+            setDataSource('pi-af');
             setLastUpdated(new Date());
             return;
+          } else {
+            throw new Error('PI AF service returned no data');
           }
         } catch (error) {
-          console.log('Real PI AF data loading failed, falling back to simulated data:', error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error('❌ PI AF DATA LOADING FAILED:', errorMessage);
+          setLastPIError(errorMessage);
+          
+          // IMPORTANT: Don't fall back silently - let user know PI failed
+          console.log('❌ Using simulated data because PI AF failed');
+          setDataSource('simulated');
         }
+      } else {
+        console.log('ℹ️ Development mode or no PI configuration - using simulated data');
+        setDataSource('simulated');
       }
       
-      // Fall back to simulated data (either no config, development mode, or PI connection failed)
-      console.log('Using simulated data');
+      // Use simulated data (either no config, development mode, or PI connection failed)
+      console.log('📊 Loading simulated data...');
       setWellPads(generateSimulatedData());
       setLastUpdated(new Date());
       
     } catch (error) {
-      console.error('Error loading wellpad data:', error);
-      // Fallback to simulated data
+      console.error('Error in loadWellPadData:', error);
+      setLastPIError(error instanceof Error ? error.message : String(error));
+      setDataSource('simulated');
       setWellPads(generateSimulatedData());
       setLastUpdated(new Date());
     } finally {
@@ -157,6 +178,8 @@ export default function Home() {
 
   const handlePIConfigured = () => {
     setShowConfig(false);
+    setLastPIError(null); // Clear any previous errors
+    
     // Reload configuration status
     const checkPIConfig = async () => {
       try {
@@ -177,6 +200,7 @@ export default function Home() {
   };
 
   const handleRefresh = () => {
+    setLastPIError(null); // Clear any previous errors
     loadWellPadData();
   };
 
@@ -275,19 +299,37 @@ export default function Home() {
               <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Field Production Overview</h2>
               {/* Data Source Indicator */}
               {wellPads.length > 0 && (
-                <div className="flex items-center gap-2 mt-1">
-                  {wellPads[0]?.isConnectedToPI ? (
-                    <>
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                      <span className="text-sm text-green-600 font-medium">Live PI AF Data</span>
-                    </>
-                  ) : (
-                    <>
-                      <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                      <span className="text-sm text-yellow-600 font-medium">Simulated Data</span>
-                    </>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    {dataSource === 'pi-af' ? (
+                      <>
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        <span className="text-sm text-green-600 font-medium">✅ Live PI AF Data</span>
+                      </>
+                    ) : dataSource === 'simulated' ? (
+                      <>
+                        <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                        <span className="text-sm text-yellow-600 font-medium">⚠️ Simulated Data</span>
+                        {currentMode === 'production' && (
+                          <span className="text-xs text-red-600">(PI AF Failed)</span>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
+                        <span className="text-sm text-gray-600 font-medium">❓ Unknown Data Source</span>
+                      </>
+                    )}
+                    <span className="text-xs text-slate-500">• {currentMode} mode</span>
+                  </div>
+                  
+                  {/* Show PI Error if exists */}
+                  {lastPIError && currentMode === 'production' && (
+                    <div className="flex items-start gap-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-200 dark:border-red-800">
+                      <span className="font-medium">❌ PI AF Error:</span>
+                      <span className="flex-1">{lastPIError}</span>
+                    </div>
                   )}
-                  <span className="text-xs text-slate-500">• {currentMode} mode</span>
                 </div>
               )}
             </div>

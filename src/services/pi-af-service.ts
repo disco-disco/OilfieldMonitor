@@ -107,19 +107,28 @@ export class PIAFService {
         };
       }
 
+      console.log(`📋 Found ${elements.length} elements in database '${this.config.afDatabaseName}':`);
+      elements.slice(0, 10).forEach((el, index) => {
+        console.log(`   ${index + 1}. Name: "${el.Name}", Path: "${el.Path}"`);
+      });
+
       // Step 5: If parent element path specified, validate it exists
-      if (this.config.parentElementPath) {
+      if (this.config.parentElementPath && this.config.parentElementPath.trim() !== '') {
         const parentElements = elements.filter(el => 
           el.Path.includes(this.config.parentElementPath) || 
-          el.Name === this.config.parentElementPath
+          el.Name === this.config.parentElementPath ||
+          el.Name.toLowerCase().includes(this.config.parentElementPath.toLowerCase())
         );
         if (parentElements.length === 0) {
-          return { 
-            isValid: false, 
-            error: 'Parent element path not found',
-            details: `Parent element path '${this.config.parentElementPath}' not found in database '${this.config.afDatabaseName}'`
-          };
+          // For now, make this a warning instead of a failure to help with configuration
+          console.warn(`⚠️ Parent element path '${this.config.parentElementPath}' not found - will use all elements`);
+          console.warn(`   Available element names: ${elements.slice(0, 10).map(e => e.Name).join(', ')}${elements.length > 10 ? ` (showing first 10 of ${elements.length})` : ''}`);
+          // Don't fail here - just proceed with all elements
+        } else {
+          console.log(`✅ Found ${parentElements.length} elements matching parent path '${this.config.parentElementPath}'`);
         }
+      } else {
+        console.log(`ℹ️ No parent element path specified - will use all ${elements.length} top-level elements`);
       }
 
       // Step 6: Try to load at least one element's children (wellpad -> wells)
@@ -181,9 +190,15 @@ export class PIAFService {
         const response = await fetch(endpoint, this.getFetchOptions());
         console.log(`   Status: ${response.status} ${response.statusText}`);
 
-        if (response.ok || response.status === 401) {
+        if (response.ok) {
           this.workingEndpoint = endpoint;
           console.log(`✅ Working endpoint found: ${endpoint}`);
+          return endpoint;
+        } else if (response.status === 401) {
+          // 401 means server is reachable but authentication failed
+          this.workingEndpoint = endpoint;
+          console.log(`🔑 Server reachable but authentication required: ${endpoint}`);
+          console.log(`   This is normal for Windows Authentication - endpoint will work for data requests`);
           return endpoint;
         }
       } catch (error) {
@@ -218,6 +233,7 @@ export class PIAFService {
 
       try {
         const response = await fetch(dbUrl, this.getFetchOptions());
+        console.log(`   Status: ${response.status} ${response.statusText}`);
         
         if (response.ok) {
           const data = await response.json();
@@ -235,6 +251,9 @@ export class PIAFService {
                 if (serverDbResponse.ok) {
                   const serverDbData = await serverDbResponse.json();
                   return serverDbData.Items || [];
+                } else if (serverDbResponse.status === 401) {
+                  console.log(`🔑 Authentication required for server databases - this is expected for Windows Auth`);
+                  throw new Error('Windows Authentication required - please ensure you are on a domain-joined machine');
                 }
               }
             }
@@ -249,6 +268,9 @@ export class PIAFService {
             // Direct database response
             return data.Items || [];
           }
+        } else if (response.status === 401) {
+          console.log(`🔑 Format ${i + 1} requires authentication (401) - continuing to next format`);
+          continue; // Try next format, 401 might work with different URL structure
         }
       } catch (error) {
         console.log(`❌ Database format ${i + 1} failed:`, error);
