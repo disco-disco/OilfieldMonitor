@@ -142,7 +142,7 @@ export default function PISystemConfig({ onConfigured }: PIConfigProps) {
       });
 
       // Use client-side direct connection test (like the working debug tools)
-      const result = await testDirectConnection();
+      const result = await testDirectConnection(mode);
       setTestResult(result);
     } catch (error) {
       console.error('Connection test error:', error);
@@ -152,7 +152,7 @@ export default function PISystemConfig({ onConfigured }: PIConfigProps) {
     }
   };
 
-  const testDirectConnection = async () => {
+  const testDirectConnection = async (currentMode: 'development' | 'production') => {
     const testResult = {
       success: false,
       message: '',
@@ -205,7 +205,7 @@ export default function PISystemConfig({ onConfigured }: PIConfigProps) {
       }
 
       // In development mode, just confirm server connectivity
-      if (mode === 'development') {
+      if (currentMode === 'development') {
         testResult.success = true;
         testResult.message = `✅ PI Web API server reachable at ${workingEndpoint}. Development mode ready.`;
         return testResult;
