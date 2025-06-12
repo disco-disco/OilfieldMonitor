@@ -114,6 +114,22 @@ export default function ConnectionDebugger() {
           <p className="text-gray-600 mt-2">
             Test connectivity to your PI Web API server with different endpoint configurations
           </p>
+          
+          {/* Environment Detection */}
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start gap-2">
+              <span className="text-blue-600 text-lg">ℹ️</span>
+              <div>
+                <h4 className="font-semibold text-blue-800">Environment Notice:</h4>
+                <p className="text-sm text-blue-700 mt-1">
+                  {typeof window !== 'undefined' && navigator.platform.includes('Mac') ? 
+                    '🍎 Running on Mac - PI servers may not be reachable. Pull to Windows PC for production testing.' :
+                    '🪟 Production environment detected - PI servers should be accessible.'
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
         
         <div className="p-6 space-y-4">
@@ -181,7 +197,24 @@ export default function ConnectionDebugger() {
                   <li>• <strong>Connection refused</strong> means PI Web API service isn't running</li>
                   <li>• <strong>DNS errors</strong> mean the server name is incorrect</li>
                   <li>• <strong>Timeout</strong> suggests network connectivity issues</li>
+                  <li>• <strong>Fetch failed on Mac</strong> - Normal! Test on Windows PC where PI servers are accessible</li>
                 </ul>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mt-4">
+            <div className="flex items-start gap-2">
+              <span className="text-green-600 text-lg">🚀</span>
+              <div>
+                <h4 className="font-semibold text-green-800">Production Testing Steps:</h4>
+                <ol className="mt-2 space-y-1 text-sm text-green-700 list-decimal list-inside">
+                  <li>Commit and push changes from Mac development environment</li>
+                  <li>Pull changes to Windows PC production environment</li>
+                  <li>Run <code className="bg-green-100 px-1 rounded">npm run dev</code> on Windows PC</li>
+                  <li>Open <code className="bg-green-100 px-1 rounded">http://localhost:3001/debug</code> on Windows PC</li>
+                  <li>Test with your actual PI Web API server names</li>
+                </ol>
               </div>
             </div>
           </div>
