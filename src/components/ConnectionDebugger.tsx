@@ -43,14 +43,11 @@ export default function ConnectionDebugger() {
       }]);
 
       try {
-        // Test via our enhanced PI Web API proxy to avoid CORS issues
-        const response = await fetch('/api/pi-system/proxy', {
+        // Test via our API route to avoid CORS issues
+        const response = await fetch('/api/pi-system/debug-endpoint', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            url,
-            method: 'GET'
-          })
+          body: JSON.stringify({ url })
         });
 
         const result = await response.json();
@@ -61,15 +58,13 @@ export default function ConnectionDebugger() {
             endpoint: `${endpoint.name}: ${url}`,
             status: result.success ? 'success' : result.statusCode === 401 ? 'warning' : 'error',
             statusCode: result.statusCode,
-            message: result.message + (result.troubleshootingTip ? ` (${result.troubleshootingTip})` : ''),
+            message: result.message,
             details: result.details
           } : r
         ));
 
         // If we found a working endpoint, break
         if (result.success || result.statusCode === 401) {
-          // Found a working endpoint, let's test a few more endpoints to be thorough
-          console.log(`✅ Working endpoint found: ${url}`);
           break;
         }
 
@@ -79,7 +74,7 @@ export default function ConnectionDebugger() {
           idx === prev.length - 1 ? {
             endpoint: `${endpoint.name}: ${url}`,
             status: 'error',
-            message: `Proxy error: ${error instanceof Error ? error.message : 'Unknown error'}`
+            message: `Network error: ${error instanceof Error ? error.message : 'Unknown error'}`
           } : r
         ));
       }
