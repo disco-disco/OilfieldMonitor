@@ -165,6 +165,15 @@ export default function Home() {
                 </span>
               </div>
               
+              <a
+                href="/debug"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                🔍 Debug
+              </a>
+              
               <button
                 onClick={() => setShowConfig(!showConfig)}
                 className="flex items-center gap-2 px-3 py-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"

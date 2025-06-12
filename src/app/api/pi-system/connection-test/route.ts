@@ -7,20 +7,42 @@ export async function POST(request: NextRequest) {
 
     if (!config.afServerName) {
       return NextResponse.json(
-        { success: false, message: 'Server name is required' },
+        { success: false, message: 'AF Server name is required' },
         { status: 400 }
       );
     }
 
-    console.log(`Testing connection to PI AF Server: ${config.afServerName}`);
+    if (!config.piWebApiServerName) {
+      return NextResponse.json(
+        { success: false, message: 'PI Web API Server name is required' },
+        { status: 400 }
+      );
+    }
+
+    console.log('🔍 PI System Connection Test Starting...');
+    console.log(`   PI AF Server: ${config.afServerName}`);
+    console.log(`   PI Web API Server: ${config.piWebApiServerName}`);
+    console.log(`   Database: ${config.afDatabaseName}`);
+    console.log(`   Element Path: ${config.parentElementPath}`);
 
     const result = await testPIServerConnection(config);
     
+    console.log('🔍 Connection Test Complete:', result.success ? '✅ SUCCESS' : '❌ FAILED');
+    
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Connection test error:', error);
+    console.error('❌ Connection test error:', error);
     return NextResponse.json(
-      { success: false, message: 'Internal server error' },
+      { 
+        success: false, 
+        message: `Internal server error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        details: {
+          serverReachable: false,
+          databaseExists: false,
+          elementPathValid: false,
+          attributesAccessible: false
+        }
+      },
       { status: 500 }
     );
   }
@@ -90,48 +112,77 @@ async function testServerReachability(serverName: string): Promise<boolean> {
     `https://${serverName}/piwebapi`,
     `https://${serverName}:443/piwebapi`,
     `http://${serverName}/piwebapi`,
-    `http://${serverName}:5985/piwebapi`
+    `http://${serverName}:5985/piwebapi`,
+    `http://${serverName}:80/piwebapi`
   ];
+
+  console.log(`📡 Testing server reachability for: ${serverName}`);
 
   for (const endpoint of possibleEndpoints) {
     try {
-      console.log(`Attempting to connect to: ${endpoint}`);
+      console.log(`   Trying: ${endpoint}`);
       
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // Increased timeout
       
-      // Use Node.js fetch with proper headers
+      // Use Node.js fetch with proper headers and SSL handling
       const response = await fetch(endpoint, {
         method: 'GET',
         signal: controller.signal,
         headers: {
           'Accept': 'application/json',
           'User-Agent': 'PLINQO-OilField-Monitor/1.0'
-        }
+        },
+        // Note: In Node.js, we can't easily disable SSL verification
+        // If you have SSL issues, you might need to configure certificates
       });
       
       clearTimeout(timeoutId);
       
+      console.log(`   Status: ${response.status} ${response.statusText}`);
+      console.log(`   Headers: ${JSON.stringify(Object.fromEntries(response.headers))}`);
+      
       if (response.ok || response.status === 401) {
-        console.log(`✓ Server reachable at: ${endpoint} (Status: ${response.status})`);
+        console.log(`   ✅ Server reachable at: ${endpoint} (Status: ${response.status})`);
+        console.log(`   💡 This endpoint will be used for subsequent tests`);
         return true;
       }
       
-      console.log(`✗ Server not accessible at: ${endpoint} (Status: ${response.status})`);
+      console.log(`   ❌ Server not accessible at: ${endpoint} (Status: ${response.status})`);
+      
+      // Read response body for more details
+      try {
+        const responseText = await response.text();
+        console.log(`   📄 Response body: ${responseText.substring(0, 200)}${responseText.length > 200 ? '...' : ''}`);
+      } catch (bodyError) {
+        console.log(`   ⚠️  Could not read response body: ${bodyError}`);
+      }
       
     } catch (fetchError: unknown) {
       if (fetchError instanceof Error) {
         if (fetchError.name === 'AbortError') {
-          console.log(`✗ Timeout connecting to: ${endpoint}`);
+          console.log(`   ⏱️  Timeout connecting to: ${endpoint}`);
         } else {
-          console.log(`✗ Failed to connect to: ${endpoint} - ${fetchError.message}`);
+          console.log(`   ❌ Failed to connect to: ${endpoint}`);
+          console.log(`   🚫 Error: ${fetchError.message}`);
+          console.log(`   🔧 Error type: ${fetchError.name}`);
+          
+          // Provide specific troubleshooting tips
+          if (fetchError.message.includes('ENOTFOUND')) {
+            console.log(`   💡 DNS resolution failed. Check server name: ${serverName}`);
+          } else if (fetchError.message.includes('ECONNREFUSED')) {
+            console.log(`   💡 Connection refused. PI Web API service may not be running.`);
+          } else if (fetchError.message.includes('certificate')) {
+            console.log(`   💡 SSL certificate issue. Try HTTP endpoints or fix certificates.`);
+          }
         }
       } else {
-        console.log(`✗ Failed to connect to: ${endpoint} - Unknown error`);
+        console.log(`   ❌ Failed to connect to: ${endpoint} - Unknown error type`);
       }
     }
   }
   
+  console.log(`   ❌ No reachable endpoints found for server: ${serverName}`);
   return false;
 }
 
