@@ -46,6 +46,9 @@ export class PIAFService {
   constructor(config: PIServerConfig, attributeMapping?: AttributeMapping) {
     this.config = config;
     this.attributeMapping = attributeMapping || DEFAULT_ATTRIBUTE_MAPPING;
+    
+    // Log the attribute mapping being used
+    console.log('🎯 PI AF Service initialized with attribute mapping:', this.attributeMapping);
   }
 
   private getFetchOptions(): RequestInit {
@@ -218,6 +221,10 @@ export class PIAFService {
       throw new Error('Cannot connect to PI Web API server');
     }
 
+    console.log(`\n🔗 DATABASE URL GENERATION:`);
+    console.log(`   Base endpoint: ${endpoint}`);
+    console.log(`   AF Server Name: "${this.config.afServerName}"`);
+
     const urlFormats = [
       `${endpoint}/assetservers`,
       `${endpoint}/assetservers/${encodeURIComponent(this.config.afServerName)}/assetdatabases`,
@@ -227,9 +234,14 @@ export class PIAFService {
       `${endpoint}/assetservers/${this.config.afServerName}/assetdatabases`
     ];
 
+    console.log(`   Generated URLs to try:`);
+    urlFormats.forEach((url, index) => {
+      console.log(`     ${index + 1}. ${url}`);
+    });
+
     for (let i = 0; i < urlFormats.length; i++) {
       const dbUrl = urlFormats[i];
-      console.log(`🔍 Database attempt ${i + 1}: ${dbUrl}`);
+      console.log(`\n🔍 Database attempt ${i + 1}: ${dbUrl}`);
 
       try {
         const response = await fetch(dbUrl, this.getFetchOptions());
@@ -247,6 +259,7 @@ export class PIAFService {
                 server.Name.toLowerCase() === this.config.afServerName.toLowerCase()
               );
               if (ourServer?.Links?.Databases) {
+                console.log(`   🎯 Found server link: ${ourServer.Links.Databases}`);
                 const serverDbResponse = await fetch(ourServer.Links.Databases, this.getFetchOptions());
                 if (serverDbResponse.ok) {
                   const serverDbData = await serverDbResponse.json();
@@ -287,6 +300,14 @@ export class PIAFService {
       throw new Error('No working endpoint available');
     }
 
+    console.log(`\n🔗 ELEMENTS URL GENERATION:`);
+    console.log(`   Working endpoint: ${this.workingEndpoint}`);
+    console.log(`   Database Name: "${database.Name}"`);
+    console.log(`   Database Path: "${database.Path}"`);
+    console.log(`   Database WebId: "${database.WebId || 'N/A'}"`);
+    console.log(`   Database Links.Elements: "${database.Links?.Elements || 'N/A'}"`);
+    console.log(`   AF Server Name: "${this.config.afServerName}"`);
+
     const urlFormats = [
       database.Links?.Elements,
       database.WebId ? `${this.workingEndpoint}/assetdatabases/${database.WebId}/elements` : null,
@@ -296,22 +317,35 @@ export class PIAFService {
       `${this.workingEndpoint}/assetservers/${encodeURIComponent(this.config.afServerName)}/assetdatabases/${encodeURIComponent(database.Name)}/elements`
     ].filter(url => url !== null);
 
+    console.log(`   Generated URLs to try:`);
+    urlFormats.forEach((url, index) => {
+      console.log(`     ${index + 1}. ${url}`);
+    });
+
     for (let i = 0; i < urlFormats.length; i++) {
       const elementsUrl = urlFormats[i];
-      console.log(`🔍 Elements attempt ${i + 1}: ${elementsUrl}`);
+      console.log(`\n🔍 Elements attempt ${i + 1}: ${elementsUrl}`);
 
       try {
         const response = await fetch(elementsUrl!, this.getFetchOptions());
+        console.log(`   Status: ${response.status} ${response.statusText}`);
         
         if (response.ok) {
           const data = await response.json();
           console.log(`✅ Elements success with format ${i + 1}`);
+          console.log(`   Response structure: ${Object.keys(data).join(', ')}`);
           
           if (data.Items) {
+            console.log(`   Found ${data.Items.length} elements in data.Items`);
             return data.Items;
           } else if (data.Elements) {
+            console.log(`   Found ${data.Elements.length} elements in data.Elements`);
             return data.Elements;
+          } else {
+            console.log(`   No Items or Elements array found in response`);
           }
+        } else {
+          console.log(`❌ Elements format ${i + 1} failed: ${response.status} ${response.statusText}`);
         }
       } catch (error) {
         console.log(`❌ Elements format ${i + 1} failed:`, error);
@@ -411,30 +445,55 @@ export class PIAFService {
 
       // 5. Load wellpad data
       const wellPads: WellPadData[] = [];
+      let totalWellpadsProcessed = 0;
+      let totalWellpadsWithWells = 0;
+      let totalWellsFound = 0;
+      let totalWellsProcessed = 0;
+
+      console.log(`🚀 Starting wellpad processing of ${wellpadElements.length} elements...`);
 
       for (const wellpadElement of wellpadElements.slice(0, 10)) { // Limit to 10 wellpads for performance
-        console.log(`🔍 Processing wellpad: ${wellpadElement.Name}`);
+        totalWellpadsProcessed++;
+        console.log(`\n🔍 Processing wellpad ${totalWellpadsProcessed}/${Math.min(wellpadElements.length, 10)}: ${wellpadElement.Name}`);
         
         try {
           // Load child elements (wells)
           const wellElements = await this.loadElements(wellpadElement);
-          console.log(`  📍 Found ${wellElements.length} wells in ${wellpadElement.Name}`);
+          console.log(`  📍 Found ${wellElements.length} child elements in ${wellpadElement.Name}`);
+          
+          if (wellElements.length === 0) {
+            console.log(`  ⚠️ Wellpad ${wellpadElement.Name} has no child elements - skipping`);
+            continue;
+          }
+          
+          totalWellpadsWithWells++;
+          totalWellsFound += wellElements.length;
 
           const wells: WellData[] = [];
 
           for (const wellElement of wellElements.slice(0, 20)) { // Limit to 20 wells per pad
             try {
+              console.log(`    🔧 Processing well: ${wellElement.Name}`);
+              
               // Load well attributes
               const attributes = await this.loadAttributes(wellElement);
-              console.log(`    🔧 Found ${attributes.length} attributes for ${wellElement.Name}`);
+              console.log(`      📊 Found ${attributes.length} attributes for ${wellElement.Name}`);
+              
+              if (attributes.length > 0) {
+                console.log(`      📋 Attribute names: ${attributes.slice(0, 5).map(a => a.Name).join(', ')}${attributes.length > 5 ? '...' : ''}`);
+              }
 
               // Map attributes to well data
               const wellData = this.mapAttributesToWellData(wellElement, attributes);
               if (wellData) {
                 wells.push(wellData);
+                totalWellsProcessed++;
+                console.log(`      ✅ Successfully mapped well data for ${wellElement.Name}`);
+              } else {
+                console.log(`      ❌ Failed to map attributes to well data for ${wellElement.Name}`);
               }
             } catch (error) {
-              console.log(`    ⚠️ Failed to load well ${wellElement.Name}:`, error);
+              console.log(`      ❌ Failed to load well ${wellElement.Name}:`, error);
               // Continue with other wells
             }
           }
@@ -449,15 +508,26 @@ export class PIAFService {
               wellCount: wells.length,
               isConnectedToPI: true
             });
+            console.log(`  ✅ Successfully created wellpad data: ${wellpadElement.Name} with ${wells.length} wells`);
+          } else {
+            console.log(`  ❌ No wells could be processed for wellpad: ${wellpadElement.Name}`);
           }
         } catch (error) {
-          console.log(`  ⚠️ Failed to process wellpad ${wellpadElement.Name}:`, error);
+          console.log(`  ❌ Failed to process wellpad ${wellpadElement.Name}:`, error);
           // Continue with other wellpads
         }
       }
 
+      // Detailed summary
+      console.log(`\n📊 WELLPAD PROCESSING SUMMARY:`);
+      console.log(`   Total wellpads processed: ${totalWellpadsProcessed}`);
+      console.log(`   Wellpads with child elements: ${totalWellpadsWithWells}`);
+      console.log(`   Total wells found: ${totalWellsFound}`);
+      console.log(`   Total wells successfully processed: ${totalWellsProcessed}`);
+      console.log(`   Final wellpads with data: ${wellPads.length}`);
+
       if (wellPads.length === 0) {
-        throw new Error('No wellpad data could be loaded from PI AF - all wellpads failed to process');
+        throw new Error(`No wellpad data could be loaded from PI AF:\n- Processed ${totalWellpadsProcessed} wellpads\n- ${totalWellpadsWithWells} had child elements\n- ${totalWellsFound} wells found but ${totalWellsProcessed} successfully processed\n- Check if elements are actually wells with production attributes`);
       }
 
       console.log(`🎉 Successfully loaded ${wellPads.length} wellpads with real PI AF data`);
@@ -472,20 +542,31 @@ export class PIAFService {
   // Map PI AF attributes to WellData
   private mapAttributesToWellData(element: AFElement, attributes: AFAttribute[]): WellData | null {
     try {
+      console.log(`        🎯 Mapping attributes for element: ${element.Name}`);
+      console.log(`        📋 Looking for attributes: ${Object.values(this.attributeMapping).join(', ')}`);
+      
       const attributeMap: { [key: string]: any } = {};
       
       // Create a map of attribute names to values
       attributes.forEach(attr => {
         const value = attr.Value?.Value !== undefined ? attr.Value.Value : null;
         attributeMap[attr.Name] = value;
+        console.log(`           - ${attr.Name}: ${value}`);
       });
 
-      // Extract values using attribute mapping
+      // Check if we have any of the expected attributes
+      const expectedAttributes = Object.values(this.attributeMapping);
+      const foundAttributes = expectedAttributes.filter(attr => attributeMap.hasOwnProperty(attr));
+      console.log(`        🔍 Found ${foundAttributes.length}/${expectedAttributes.length} expected attributes: ${foundAttributes.join(', ')}`);
+
+      // Extract values using attribute mapping (with fallbacks for missing attributes)
       const oilRate = this.getNumericValue(attributeMap[this.attributeMapping.oilRate]) || Math.floor(Math.random() * 150) + 50;
       const liquidRate = this.getNumericValue(attributeMap[this.attributeMapping.liquidRate]) || oilRate * (1 + Math.random() * 0.5);
       const waterCut = this.getNumericValue(attributeMap[this.attributeMapping.waterCut]) || Math.floor(Math.random() * 30) + 5;
       const espFrequency = this.getNumericValue(attributeMap[this.attributeMapping.espFrequency]) || Math.floor(Math.random() * 20) + 40;
       const planTarget = this.getNumericValue(attributeMap[this.attributeMapping.planTarget]) || oilRate + Math.floor(Math.random() * 40) - 20;
+
+      console.log(`        📊 Mapped values: oilRate=${oilRate}, liquidRate=${liquidRate}, waterCut=${waterCut}, espFrequency=${espFrequency}`);
 
       // Calculate plan deviation
       const planDeviation = planTarget > 0 ? ((oilRate - planTarget) / planTarget * 100) : 0;
@@ -495,7 +576,7 @@ export class PIAFService {
       if (Math.abs(planDeviation) > 15 || waterCut > 25) status = 'alert';
       else if (Math.abs(planDeviation) > 10 || waterCut > 20) status = 'warning';
 
-      return {
+      const wellData = {
         name: element.Name,
         wellPadName: element.Path.split('\\').slice(-2, -1)[0] || 'Unknown Pad',
         oilRate: Math.round(oilRate),
@@ -506,8 +587,11 @@ export class PIAFService {
         status,
         lastUpdated: new Date()
       };
+
+      console.log(`        ✅ Successfully created well data for ${element.Name}`);
+      return wellData;
     } catch (error) {
-      console.error(`Error mapping attributes for element ${element.Name}:`, error);
+      console.error(`        ❌ Error mapping attributes for element ${element.Name}:`, error);
       return null;
     }
   }
