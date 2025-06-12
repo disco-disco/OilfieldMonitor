@@ -26,6 +26,12 @@ interface AFElement {
   Path: string;
   TemplateName?: string;
   HasChildren?: boolean;
+  WebId?: string;
+  Links?: {
+    Attributes?: string;
+    Elements?: string;
+    [key: string]: any;
+  };
 }
 
 interface AFAttribute {
@@ -424,32 +430,97 @@ export default function PIExplorerPage() {
     setErrors({ ...errors, attributes: undefined });
 
     try {
-      // Get attributes for the selected element
-      const attributesUrl = `${workingEndpoint}/elements/path:${encodeURIComponent(elemPath)}/attributes`;
-      console.log(`🔍 Getting attributes from: ${attributesUrl}`);
+      // Find the selected element to get its WebId and Links
+      const selectedEl = elements.find(el => el.Path === elemPath || el.Name === elemPath);
+      console.log(`🔍 Selected element info:`, selectedEl);
+      console.log(`🔍 Looking for element with path: ${elemPath}`);
 
-      const response = await fetch(attributesUrl, getFetchOptions());
+      // Try multiple URL formats for getting attributes
+      const urlFormats = [
+        // Format 1: Use element Links.Attributes if available (most reliable)
+        selectedEl?.Links?.Attributes,
+        // Format 2: Use WebId approach
+        selectedEl?.WebId ? `${workingEndpoint}/elements/${selectedEl.WebId}/attributes` : null,
+        // Format 3: Path-based approach with proper encoding
+        `${workingEndpoint}/elements?path=${encodeURIComponent(selectedEl?.Path || elemPath)}&field=attributes`,
+        // Format 4: Direct path approach
+        `${workingEndpoint}/elements/path:${encodeURIComponent(selectedEl?.Path || elemPath)}/attributes`,
+        // Format 5: Alternative path format without "path:" prefix
+        `${workingEndpoint}/elements/${encodeURIComponent(selectedEl?.Path || elemPath)}/attributes`,
+        // Format 6: Using element name instead of path
+        selectedEl?.Name ? `${workingEndpoint}/elements?name=${encodeURIComponent(selectedEl.Name)}&field=attributes` : null,
+        // Format 7: Direct attribute query
+        `${workingEndpoint}/attributes?elementpath=${encodeURIComponent(selectedEl?.Path || elemPath)}`
+      ].filter(url => url !== null); // Remove null entries
 
-      console.log(`   Attributes list status: ${response.status}`);
+      let successfulResponse = null;
+      let lastError = null;
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Attributes retrieved:', data);
-        
-        if (data.Items) {
-          setAttributes(data.Items);
-          setSelectedElement(elemPath);
-        } else {
-          setErrors({ attributes: 'No attributes found for element' });
+      for (let i = 0; i < urlFormats.length; i++) {
+        const attributesUrl = urlFormats[i];
+        console.log(`🔍 Attempt ${i + 1}: Getting attributes from: ${attributesUrl}`);
+
+        try {
+          const response = await fetch(attributesUrl!, getFetchOptions());
+          console.log(`   Status: ${response.status} ${response.statusText}`);
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log(`✅ Success with format ${i + 1}:`, data);
+            
+            if (data.Items) {
+              successfulResponse = data;
+              break;
+            } else if (data.Name && data.Attributes) {
+              // Sometimes the response structure is different
+              successfulResponse = { Items: data.Attributes };
+              break;
+            } else if (Array.isArray(data)) {
+              // Sometimes attributes are returned as direct array
+              successfulResponse = { Items: data };
+              break;
+            } else {
+              console.log(`⚠️ Format ${i + 1} returned data but no Items array`);
+              lastError = `Format ${i + 1} returned unexpected data structure`;
+              continue;
+            }
+          } else if (response.status === 401) {
+            setErrors({ attributes: 'Authentication required (401) - but element is reachable' });
+            return;
+          } else if (response.status === 400) {
+            const errorText = await response.text();
+            console.log(`❌ Format ${i + 1} failed with 400:`, errorText);
+            lastError = `Format ${i + 1} Error 400: ${errorText}`;
+            continue; // Try next format
+          } else if (response.status === 404) {
+            console.log(`❌ Format ${i + 1} failed with 404 - trying next format`);
+            lastError = `Format ${i + 1}: Attributes not found (404)`;
+            continue; // Try next format
+          } else {
+            const errorText = await response.text();
+            console.log(`❌ Format ${i + 1} failed with ${response.status}:`, errorText);
+            lastError = `Format ${i + 1} Error ${response.status}: ${errorText}`;
+            continue; // Try next format
+          }
+        } catch (fetchError) {
+          console.log(`❌ Format ${i + 1} network error:`, fetchError);
+          lastError = `Format ${i + 1} Network error: ${fetchError}`;
+          continue; // Try next format
         }
-      } else if (response.status === 401) {
-        setErrors({ attributes: 'Authentication required (401) - but element is reachable' });
-      } else if (response.status === 404) {
-        setErrors({ attributes: `Element not found (404)` });
-      } else {
-        const errorText = await response.text();
-        setErrors({ attributes: `Error ${response.status}: ${errorText}` });
       }
+
+      if (successfulResponse) {
+        if (successfulResponse.Items && successfulResponse.Items.length > 0) {
+          setAttributes(successfulResponse.Items);
+          setSelectedElement(elemPath);
+          console.log(`✅ Found ${successfulResponse.Items.length} attributes for element '${selectedEl?.Name || elemPath}'`);
+        } else {
+          setErrors({ attributes: `No attributes found for element '${selectedEl?.Name || elemPath}' (empty Items array)` });
+        }
+      } else {
+        setErrors({ attributes: `All URL formats failed. Last error: ${lastError}` });
+      }
+      
     } catch (error) {
       console.error('Attributes loading failed:', error);
       setErrors({ attributes: `Network error: ${error}` });
