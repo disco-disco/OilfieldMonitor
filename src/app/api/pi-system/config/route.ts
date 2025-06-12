@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { piSystemService } from '@/services/pi-system';
+import { ConfigManager } from '@/services/config-manager';
 import { PIServerConfig, AttributeMapping } from '@/types/pi-system';
 
 export async function POST(request: NextRequest) {
@@ -19,25 +19,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Set mode if provided
+    // Create ConfigManager instance
+    const configManager = new ConfigManager();
+    
+    // Update configuration
     if (mode) {
-      piSystemService.setMode(mode);
+      configManager.setMode(mode);
+    }
+    configManager.setPIServerConfig(config);
+    if (attributeMapping) {
+      configManager.setAttributeMapping(attributeMapping);
     }
 
-    const success = await piSystemService.configure(config, attributeMapping);
+    console.log('✅ PI configuration saved successfully');
+    console.log('   Mode:', configManager.getMode());
+    console.log('   AF Server:', config.afServerName);
+    console.log('   Web API Server:', config.piWebApiServerName);
+    console.log('   Database:', config.afDatabaseName);
     
-    if (success) {
-      return NextResponse.json({ 
-        success: true, 
-        message: 'PI System configured successfully',
-        config: piSystemService.getConfiguration()
-      });
-    } else {
-      return NextResponse.json(
-        { success: false, message: 'Failed to configure PI System' },
-        { status: 500 }
-      );
-    }
+    return NextResponse.json({ 
+      success: true, 
+      message: 'PI System configured successfully',
+      config: configManager.getConfig()
+    });
   } catch (error) {
     console.error('PI configuration error:', error);
     return NextResponse.json(
@@ -49,7 +53,8 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   try {
-    const config = piSystemService.getConfiguration();
+    const configManager = new ConfigManager();
+    const config = configManager.getConfig();
     return NextResponse.json({ 
       success: true,
       config 
