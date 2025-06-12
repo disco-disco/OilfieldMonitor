@@ -14,6 +14,11 @@ interface AFDatabase {
   Name: string;
   Path: string;
   Description?: string;
+  WebId?: string;
+  Links?: {
+    Elements?: string;
+    [key: string]: any;
+  };
 }
 
 interface AFElement {
@@ -315,32 +320,90 @@ export default function PIExplorerPage() {
     setErrors({ ...errors, elements: undefined });
 
     try {
-      // Get root elements from the database
-      const elementsUrl = `${workingEndpoint}/assetdatabases/path:\\\\\\\\${encodeURIComponent(config.afServerName)}\\\\${encodeURIComponent(dbName)}/elements`;
-      console.log(`🔍 Getting elements from: ${elementsUrl}`);
+      // Find the selected database to get its WebId and Links
+      const selectedDb = databases.find(db => db.Name === dbName);
+      console.log(`🔍 Selected database info:`, selectedDb);
 
-      const response = await fetch(elementsUrl, getFetchOptions());
+      // Try multiple URL formats for getting elements
+      const urlFormats = [
+        // Format 1: Use database Links.Elements if available (most reliable)
+        selectedDb?.Links?.Elements,
+        // Format 2: Use WebId approach
+        selectedDb?.WebId ? `${workingEndpoint}/assetdatabases/${selectedDb.WebId}/elements` : null,
+        // Format 3: Path-based approach with proper encoding
+        `${workingEndpoint}/assetdatabases?path=${encodeURIComponent(selectedDb?.Path || `\\\\${config.afServerName}\\${dbName}`)}&field=elements`,
+        // Format 4: Direct path approach
+        `${workingEndpoint}/assetdatabases/path:${encodeURIComponent(`\\\\${config.afServerName}\\${dbName}`)}/elements`,
+        // Format 5: Alternative path format
+        `${workingEndpoint}/elements?path=${encodeURIComponent(`\\\\${config.afServerName}\\${dbName}`)}`,
+        // Format 6: Server-database combination
+        `${workingEndpoint}/assetservers/${encodeURIComponent(config.afServerName)}/assetdatabases/${encodeURIComponent(dbName)}/elements`
+      ].filter(url => url !== null); // Remove null entries
 
-      console.log(`   Elements list status: ${response.status}`);
+      let successfulResponse = null;
+      let lastError = null;
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Elements retrieved:', data);
-        
-        if (data.Items) {
-          setElements(data.Items);
-          setSelectedDatabase(dbName);
-        } else {
-          setErrors({ elements: 'No elements found in database' });
+      for (let i = 0; i < urlFormats.length; i++) {
+        const elementsUrl = urlFormats[i];
+        console.log(`🔍 Attempt ${i + 1}: Getting elements from: ${elementsUrl}`);
+
+        try {
+          const response = await fetch(elementsUrl!, getFetchOptions());
+          console.log(`   Status: ${response.status} ${response.statusText}`);
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log(`✅ Success with format ${i + 1}:`, data);
+            
+            if (data.Items) {
+              successfulResponse = data;
+              break;
+            } else if (data.Name && data.Elements) {
+              // Sometimes the response structure is different
+              successfulResponse = { Items: data.Elements };
+              break;
+            } else {
+              console.log(`⚠️ Format ${i + 1} returned data but no Items array`);
+              lastError = `Format ${i + 1} returned unexpected data structure`;
+              continue;
+            }
+          } else if (response.status === 401) {
+            setErrors({ elements: 'Authentication required (401) - but database is reachable' });
+            return;
+          } else if (response.status === 400) {
+            const errorText = await response.text();
+            console.log(`❌ Format ${i + 1} failed with 400:`, errorText);
+            lastError = `Format ${i + 1} Error 400: ${errorText}`;
+            continue; // Try next format
+          } else if (response.status === 404) {
+            console.log(`❌ Format ${i + 1} failed with 404 - trying next format`);
+            lastError = `Format ${i + 1}: Elements not found (404)`;
+            continue; // Try next format
+          } else {
+            const errorText = await response.text();
+            console.log(`❌ Format ${i + 1} failed with ${response.status}:`, errorText);
+            lastError = `Format ${i + 1} Error ${response.status}: ${errorText}`;
+            continue; // Try next format
+          }
+        } catch (fetchError) {
+          console.log(`❌ Format ${i + 1} network error:`, fetchError);
+          lastError = `Format ${i + 1} Network error: ${fetchError}`;
+          continue; // Try next format
         }
-      } else if (response.status === 401) {
-        setErrors({ elements: 'Authentication required (401) - but database is reachable' });
-      } else if (response.status === 404) {
-        setErrors({ elements: `Database '${dbName}' not found (404)` });
-      } else {
-        const errorText = await response.text();
-        setErrors({ elements: `Error ${response.status}: ${errorText}` });
       }
+
+      if (successfulResponse) {
+        if (successfulResponse.Items && successfulResponse.Items.length > 0) {
+          setElements(successfulResponse.Items);
+          setSelectedDatabase(dbName);
+          console.log(`✅ Found ${successfulResponse.Items.length} elements in database '${dbName}'`);
+        } else {
+          setErrors({ elements: `No elements found in database '${dbName}' (empty Items array)` });
+        }
+      } else {
+        setErrors({ elements: `All URL formats failed. Last error: ${lastError}` });
+      }
+      
     } catch (error) {
       console.error('Elements loading failed:', error);
       setErrors({ elements: `Network error: ${error}` });
