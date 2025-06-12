@@ -12,7 +12,7 @@ interface HybridTestResult {
 }
 
 export default function HybridConnectionTester() {
-  const [serverName, setServerName] = useState('SRV-PIV0101');
+  const [serverName, setServerName] = useState('SRV-PIV01'); // Updated to match your actual server
   const [isRunning, setIsRunning] = useState(false);
   const [results, setResults] = useState<HybridTestResult[]>([]);
 

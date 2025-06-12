@@ -11,7 +11,7 @@ interface DirectTestResult {
 }
 
 export default function DirectConnectionTester() {
-  const [serverName, setServerName] = useState('SRV-PIV0101');
+  const [serverName, setServerName] = useState('SRV-PIV01'); // Updated to match your actual server
   const [isRunning, setIsRunning] = useState(false);
   const [results, setResults] = useState<DirectTestResult[]>([]);
 
