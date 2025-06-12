@@ -247,6 +247,15 @@ export default function Home() {
                 🔍 Debug
               </a>
               
+              <a
+                href="/pi-explorer"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                🌲 PI Explorer
+              </a>
+              
               <button
                 onClick={() => setShowConfig(!showConfig)}
                 className="flex items-center gap-2 px-3 py-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
