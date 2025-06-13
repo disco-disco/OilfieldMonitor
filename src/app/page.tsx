@@ -96,24 +96,43 @@ export default function Home() {
     }
   }, []);
 
-  // Load real PI data using the API endpoint
+  // Load real PI data using client-side connection (like pi-explorer)
   const loadRealPIData = async (config: any): Promise<WellPadData[] | null> => {
     try {
-      console.log('🔍 Attempting to load real PI AF data via API...');
+      console.log('🔍 Attempting to load real PI AF data via client-side connection (v2)...');
       
-      const response = await fetch('/api/pi-system/load-data');
-      const result = await response.json();
+      // Import client-side PI AF service
+      const { ClientPIAFService } = await import('@/services/pi-af-client');
       
-      if (result.success && result.data) {
-        console.log(`🎉 Successfully loaded ${result.data.length} wellpads from PI AF`);
-        return result.data;
+      // Create client-side PI AF service instance
+      const clientPIAFService = new ClientPIAFService(
+        config.piServerConfig,
+        config.attributeMapping || {}
+      );
+      
+      // Test connection first
+      const connectionTest = await clientPIAFService.testConnection();
+      
+      if (connectionTest.success) {
+        console.log('✅ Client-side PI AF connection successful');
+        
+        // Load wellpad data using client-side connection
+        const wellPads = await clientPIAFService.loadWellPadData();
+        
+        if (wellPads && wellPads.length > 0) {
+          console.log(`🎉 Successfully loaded ${wellPads.length} wellpads from client-side PI AF`);
+          return wellPads;
+        } else {
+          console.log('⚠️ No wellpad data found via client-side PI AF');
+          return null;
+        }
       } else {
-        console.log(`⚠️ PI AF data loading failed: ${result.error}`);
+        console.log(`⚠️ Client-side PI AF connection failed: ${connectionTest.message}`);
         return null;
       }
       
     } catch (error) {
-      console.error('❌ Error calling PI AF data API:', error);
+      console.error('❌ Error with client-side PI AF connection:', error);
       return null;
     }
   };

@@ -1,0 +1,20 @@
+{
+  "mode": "production",
+  "piServerConfig": {
+    "piWebApiServerName": "MES-PIV0801IQ",
+    "afServerName": "MES-PIV0801IQ", 
+    "afDatabaseName": "Configuration",
+    "parentElementPath": "Element1\\Element2",
+    "templateName": "WellTemplate"
+  },
+  "attributeMapping": {
+    "oilRate": "Oil Production Rate",
+    "liquidRate": "Total Liquid Rate", 
+    "waterCut": "Water Cut Percentage",
+    "espFrequency": "ESP Motor Frequency",
+    "planTarget": "Daily Production Target",
+    "gasRate": "Gas Production Rate",
+    "tubingPressure": "Tubing Head Pressure"
+  },
+  "lastUpdated": "2024-12-13T10:30:00.000Z"
+}
