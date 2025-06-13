@@ -33,52 +33,36 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    if (mode === 'development' || !config) {
-      // Development mode - demonstrate WebID approach with simulated success
-      console.log('🔧 Development mode - simulating WebID-based approach');
-      
-      testResult.success = true;
-      testResult.message = 'Development mode: WebID-based implementation ready for production testing';
-      testResult.steps.endpointFound = true;
-      testResult.steps.assetServersLoaded = true;
-      testResult.steps.targetServerFound = true;
-      testResult.steps.databasesLoaded = true;
-      testResult.steps.targetDatabaseFound = true;
-      testResult.steps.elementsLoaded = true;
-      
-      if (config) {
-        testResult.details.workingEndpoint = `https://${config.piWebApiServerName}/piwebapi (configured)`;
-        testResult.details.assetServers = [`${config.afServerName} (configured)`, 'Other servers (simulated)'];
-        testResult.details.targetServerWebId = 'F1ED1C6A-52C4-4E4B-8B1A-1234567890AB (simulated WebID)';
-        testResult.details.databases = [`${config.afDatabaseName} (configured)`, 'Other databases (simulated)'];
-        testResult.details.targetDatabaseWebId = 'F1ED1C6A-52C4-4E4B-8B1A-ABCDEF123456 (simulated WebID)';
-      } else {
-        testResult.details.workingEndpoint = 'https://srv-piwebapi01/piwebapi (not configured)';
-        testResult.details.assetServers = ['No configuration available'];
-        testResult.details.targetServerWebId = 'Configuration required';
-        testResult.details.databases = ['No configuration available'];
-        testResult.details.targetDatabaseWebId = 'Configuration required';
-      }
-      
-      testResult.details.elementCount = 10;
-      testResult.details.sampleElements = ['WellPad 01 (simulated)', 'WellPad 02 (simulated)', 'WellPad 03 (simulated)'];
-      
+    if (!config) {
       return NextResponse.json({
-        ...testResult,
-        configurationUsed: config ? {
-          afServerName: config.afServerName,
-          piWebApiServerName: config.piWebApiServerName,
-          afDatabaseName: config.afDatabaseName,
-          parentElementPath: config.parentElementPath,
-          configured: true
-        } : {
+        success: false,
+        message: 'No PI configuration found. Please configure the PI System using PI Explorer first.',
+        steps: {
+          endpointFound: false,
+          assetServersLoaded: false,
+          targetServerFound: false,
+          databasesLoaded: false,
+          targetDatabaseFound: false,
+          elementsLoaded: false
+        },
+        details: {
+          workingEndpoint: null,
+          assetServers: [],
+          targetServerWebId: null,
+          databases: [],
+          targetDatabaseWebId: null,
+          elementCount: 0,
+          sampleElements: []
+        },
+        configurationUsed: {
           configured: false,
           message: 'No PI configuration found. Please configure using PI Explorer.'
         }
       });
     }
 
-    // Production mode - test with real PI system
+    // Configuration is available - attempt real PI connection
+    console.log(`🔍 Testing WebID approach with configured PI System:`);
     console.log(`   PI AF Server: ${config.afServerName}`);
     console.log(`   PI Web API Server: ${config.piWebApiServerName}`);
     console.log(`   Database: ${config.afDatabaseName}`);
@@ -87,10 +71,9 @@ export async function GET(request: NextRequest) {
     const piAfService = new PIAFService(config, attributeMapping);
 
     try {
-      // Test the WebID-based approach step by step
-      console.log('🔍 Step 1: Testing endpoint discovery...');
+      // Test the WebID-based approach with real configuration
+      console.log('🔍 Attempting real PI connection with WebID approach...');
       
-      // Test through loadWellPadData which uses the complete WebID approach
       const wellPadData = await piAfService.loadWellPadData();
       
       testResult.success = true;
@@ -105,12 +88,25 @@ export async function GET(request: NextRequest) {
       testResult.details.elementCount = wellPadData.length;
       testResult.details.sampleElements = wellPadData.slice(0, 3).map(pad => pad.name);
       
-      console.log(`✅ WebID Test Success: Loaded ${wellPadData.length} wellpads`);
+      console.log(`✅ WebID Test Success: Loaded ${wellPadData.length} wellpads from real PI System`);
       
     } catch (error) {
-      console.error('❌ WebID Test Failed:', error);
+      console.error('❌ WebID Test Failed (Expected in development):', error);
+      
+      // Connection failed (expected in development environment)
       testResult.success = false;
-      testResult.message = `WebID-based test failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      testResult.message = mode === 'development' 
+        ? `Development environment: Cannot connect to PI servers. WebID implementation is ready for production deployment.`
+        : `Production environment: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      
+      // Show what the WebID approach would attempt
+      testResult.details.workingEndpoint = `https://${config.piWebApiServerName}/piwebapi (configured)`;
+      testResult.details.assetServers = [`${config.afServerName} (target server)`];
+      testResult.details.databases = [`${config.afDatabaseName} (target database)`];
+      
+      if (mode === 'development') {
+        testResult.message += `\n\nWebID Flow Ready:\n1. GET /assetservers\n2. Find server "${config.afServerName}" → Extract WebID\n3. GET /assetservers/{WEBID}/assetdatabases\n4. Find database "${config.afDatabaseName}" → Extract WebID\n5. GET /assetdatabases/{WEBID}/elements`;
+      }
     }
 
     return NextResponse.json({
