@@ -86,8 +86,8 @@ export default function Home() {
         return null;
       }
 
-      // Create PI AF service instance
-      const piafService = new PIAFService(config.piServerConfig);
+      // Create PI AF service instance with custom attribute mapping
+      const piafService = new PIAFService(config.piServerConfig, config.attributeMapping);
       
       // Load wellpad data from PI AF
       const wellPads = await piafService.loadWellPadData();
