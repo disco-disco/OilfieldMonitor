@@ -172,7 +172,7 @@ export default function DynamicWellPadLayout({ wellPad, index }: DynamicWellPadL
               Layout: {gridLayout.split(' ').pop()?.replace('grid-cols-', '')} columns on large screens
             </span>
             <span>
-              Last Updated: {wellPad.wells[0].lastUpdate.toLocaleTimeString()}
+              Last Updated: {wellPad.wells[0]?.lastUpdated ? new Date(wellPad.wells[0].lastUpdated).toLocaleTimeString() : 'Unknown'}
             </span>
           </div>
         </div>

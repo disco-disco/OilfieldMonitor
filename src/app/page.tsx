@@ -47,7 +47,8 @@ export default function Home() {
             setLastUpdated(new Date());
             return;
           } else {
-            throw new Error('PI AF service returned no data');
+            console.log('⚠️ PI AF connection failed or returned no data, falling back to simulated data');
+            setDataSource('simulated');
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
@@ -173,87 +174,6 @@ export default function Home() {
   }, [wellPads]);
 
   const dynamicStats = calculateDynamicStats();
-  const generateSimulatedData = (): WellPadData[] => {
-    const wellPads: WellPadData[] = [];
-    
-    for (let padNum = 1; padNum <= 10; padNum++) {
-      const wellCount = Math.floor(Math.random() * 11) + 10;
-      const wells: WellData[] = [];
-      
-      for (let wellNum = 0; wellNum < wellCount; wellNum++) {
-        const wellNumber = Math.floor(Math.random() * 900) + 100;
-        const oilRate = Math.floor(Math.random() * 150) + 50;
-        const liquidRate = Math.floor(oilRate * (1 + Math.random() * 0.5));
-        const waterCut = Math.floor(Math.random() * 30) + 5;
-        const espFrequency = Math.floor(Math.random() * 20) + 40;
-        const planTarget = oilRate + Math.floor(Math.random() * 40) - 20;
-        const deviation = planTarget > 0 ? ((oilRate - planTarget) / planTarget * 100) : 0;
-        
-        let status: 'good' | 'warning' | 'alert' = 'good';
-        if (Math.abs(deviation) > 15 || waterCut > 25) status = 'alert';
-        else if (Math.abs(deviation) > 10 || waterCut > 20) status = 'warning';
-        
-        // Add some enhanced simulated attributes to demonstrate dynamic layout
-        const baseWell: WellData = {
-          name: `PL-${wellNumber.toString().padStart(3, '0')}`,
-          wellPadName: `WellPad ${padNum.toString().padStart(2, '0')}`,
-          oilRate,
-          liquidRate,
-          waterCut,
-          espFrequency,
-          planTarget,
-          planDeviation: Math.round(deviation * 10) / 10,
-          status,
-          lastUpdate: new Date()
-        };
-
-        // Randomly add extended attributes to some wells to show dynamic adaptation
-        if (Math.random() > 0.3) { // 70% chance
-          baseWell.gasRate = Math.floor(Math.random() * 500) + 100;
-        }
-        if (Math.random() > 0.4) { // 60% chance
-          baseWell.tubingPressure = Math.floor(Math.random() * 200) + 800;
-        }
-        if (Math.random() > 0.5) { // 50% chance
-          baseWell.casingPressure = Math.floor(Math.random() * 300) + 600;
-        }
-        if (Math.random() > 0.6) { // 40% chance
-          baseWell.temperature = Math.floor(Math.random() * 50) + 180;
-        }
-        if (Math.random() > 0.7) { // 30% chance
-          baseWell.flowlinePressure = Math.floor(Math.random() * 150) + 400;
-        }
-        if (Math.random() > 0.8) { // 20% chance
-          baseWell.chokeSize = Math.floor(Math.random() * 16) + 8;
-        }
-        if (Math.random() > 0.8) { // 20% chance  
-          baseWell.motorAmps = Math.floor(Math.random() * 30) + 20;
-        }
-        if (Math.random() > 0.9) { // 10% chance
-          baseWell.customAttributes = {
-            'Pump_Intake_Pressure': Math.floor(Math.random() * 100) + 300,
-            'Pump_Discharge_Pressure': Math.floor(Math.random() * 200) + 1000,
-            'Run_Hours_Today': Math.floor(Math.random() * 24)
-          };
-        }
-
-        wells.push(baseWell);
-      }
-      
-      wellPads.push({
-        name: `WellPad ${padNum.toString().padStart(2, '0')}`,
-        wells,
-        status: wells.some(w => w.status === 'alert') ? 'alert' : 
-               wells.some(w => w.status === 'warning') ? 'warning' : 'good',
-        totalWells: wells.length,
-        activeWells: wells.filter(w => w.status !== 'alert').length,
-        avgOilRate: wells.reduce((sum, well) => sum + well.oilRate, 0) / wells.length,
-        avgWaterCut: Math.round(wells.reduce((sum, well) => sum + well.waterCut, 0) / wells.length)
-      });
-    }
-    
-    return wellPads;
-  };
 
   // Check PI configuration on load
   useEffect(() => {
@@ -339,7 +259,7 @@ export default function Home() {
               </div>
               
               {/* PI Connection Status */}
-              {wellPads.length > 0 && wellPads[0].isConnectedToPI && (
+              {dataSource === 'pi-af' && (
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></div>
                   <span className="text-sm text-blue-600 dark:text-blue-400">
