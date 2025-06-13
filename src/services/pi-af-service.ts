@@ -588,7 +588,7 @@ export class PIAFService {
         planTarget,
         planDeviation,
         status,
-        lastUpdate: new Date(),
+        lastUpdated: new Date().toISOString(),
         // Extended attributes (only include if they have values, convert null to undefined)
         ...(gasRate !== undefined && gasRate !== null && { gasRate }),
         ...(tubingPressure !== undefined && tubingPressure !== null && { tubingPressure }),

@@ -187,38 +187,57 @@ export default function DynamicWellTile({ well, availableAttributes, compact = f
   const getAvailableAttributes = () => {
     const attributes: Array<{ key: string; value: number; config: any }> = [];
     
-    Object.entries(well).forEach(([key, value]) => {
-      if (key in ATTRIBUTE_CONFIG && typeof value === 'number') {
-        attributes.push({ 
-          key, 
-          value, 
-          config: ATTRIBUTE_CONFIG[key as keyof typeof ATTRIBUTE_CONFIG] 
-        });
-      }
-    });
-
-    // Add custom attributes if they exist
-    if (well.customAttributes) {
-      Object.entries(well.customAttributes).forEach(([key, value]) => {
+    // Use the new attributes structure
+    if (well.attributes) {
+      Object.entries(well.attributes).forEach(([attributeName, value]) => {
         if (typeof value === 'number') {
           attributes.push({
-            key: `custom_${key}`,
+            key: attributeName,
             value,
             config: {
-              label: key.replace(/_/g, ' '),
-              unit: '',
-              icon: Settings,
-              priority: 100,
+              label: attributeName.replace(/_/g, ' '),
+              unit: getUnitForAttribute(attributeName),
+              icon: getIconForAttribute(attributeName),
+              priority: attributes.length + 1,
               colorClass: 'text-slate-600',
-              format: (v: number) => v.toString()
+              format: (v: number) => v.toLocaleString()
             }
           });
         }
       });
     }
     
-    // Sort by priority
-    return attributes.sort((a, b) => a.config.priority - b.config.priority);
+    return attributes;
+  };
+
+  // Helper function to get appropriate unit for attribute
+  const getUnitForAttribute = (attributeName: string): string => {
+    const lowerName = attributeName.toLowerCase();
+    if (lowerName.includes('rate') && lowerName.includes('oil')) return 'bbl/day';
+    if (lowerName.includes('rate') && lowerName.includes('liquid')) return 'bbl/day';
+    if (lowerName.includes('rate') && lowerName.includes('gas')) return 'Mcf/day';
+    if (lowerName.includes('pressure')) return 'psi';
+    if (lowerName.includes('frequency')) return 'Hz';
+    if (lowerName.includes('temperature')) return '°F';
+    if (lowerName.includes('cut') || lowerName.includes('%')) return '%';
+    if (lowerName.includes('choke')) return 'in';
+    if (lowerName.includes('speed')) return 'rpm';
+    if (lowerName.includes('amp')) return 'A';
+    if (lowerName.includes('vibration')) return 'in/sec';
+    if (lowerName.includes('time')) return 'hrs';
+    return '';
+  };
+
+  // Helper function to get appropriate icon for attribute
+  const getIconForAttribute = (attributeName: string) => {
+    const lowerName = attributeName.toLowerCase();
+    if (lowerName.includes('oil') || lowerName.includes('liquid') || lowerName.includes('flow')) return Droplets;
+    if (lowerName.includes('pressure')) return Gauge;
+    if (lowerName.includes('gas')) return Activity;
+    if (lowerName.includes('frequency') || lowerName.includes('amp')) return Zap;
+    if (lowerName.includes('temperature')) return Thermometer;
+    if (lowerName.includes('time')) return Clock;
+    return Settings;
   };
 
   const availableAttrs = getAvailableAttributes();
@@ -228,27 +247,24 @@ export default function DynamicWellTile({ well, availableAttributes, compact = f
   return (
     <div
       className={`rounded-lg p-3 border transition-all hover:shadow-md cursor-pointer ${
-        well.status === 'good'
+        well.status === 'active'
           ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-          : well.status === 'warning'
-          ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
-          : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+          : 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800'
       }`}
     >
       {/* Well Name and Status */}
       <div className="flex items-center justify-between mb-2">
         <h4 className="font-bold text-slate-900 dark:text-white text-sm">{well.name}</h4>
         <div className={`w-2 h-2 rounded-full ${
-          well.status === 'good' ? 'bg-green-500' :
-          well.status === 'warning' ? 'bg-yellow-500' : 'bg-red-500'
+          well.status === 'active' ? 'bg-green-500' : 'bg-gray-500'
         }`}></div>
       </div>
 
       {/* Dynamic Attributes */}
       <div className="space-y-1">
         {displayAttributes.map(({ key, value, config }) => {
-          const Icon = typeof config.icon === 'function' ? config.icon(value) : config.icon;
-          const colorClass = typeof config.colorClass === 'function' ? config.colorClass(value) : config.colorClass;
+          const Icon = config.icon;
+          const colorClass = config.colorClass;
           
           return (
             <div key={key} className="flex items-center justify-between">
@@ -273,7 +289,7 @@ export default function DynamicWellTile({ well, availableAttributes, compact = f
 
       {/* Last Update */}
       <div className="mt-2 text-xs text-slate-400">
-        Updated: {well.lastUpdate.toLocaleTimeString()}
+        Updated: {well.lastUpdated ? new Date(well.lastUpdated).toLocaleTimeString() : 'N/A'}
       </div>
     </div>
   );
