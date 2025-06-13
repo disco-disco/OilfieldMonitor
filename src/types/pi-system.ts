@@ -27,45 +27,23 @@ export interface PIElement {
 }
 
 export interface WellData {
+  id: string;
   name: string;
-  wellPadName: string;
-  oilRate: number;
-  liquidRate: number;
-  waterCut: number;
-  espFrequency: number;
-  planTarget: number;
-  planDeviation: number;
-  status: 'good' | 'warning' | 'alert';
-  lastUpdate: Date;
-  // Additional dynamic attributes that may be available
-  gasRate?: number;
-  tubingPressure?: number;
-  casingPressure?: number;
-  temperature?: number;
-  flowlinePressure?: number;
-  chokeSize?: number;
-  gasLiftRate?: number;
-  pumpSpeed?: number;
-  motorAmps?: number;
-  vibration?: number;
-  runtime?: number;
-  shutinTime?: number;
-  wellheadPressure?: number;
-  bottomholePressure?: number;
-  flowRate?: number;
-  // Custom attributes map for additional PI attributes found
-  customAttributes?: { [key: string]: number | string };
+  status: 'active' | 'inactive';
+  attributes: { [key: string]: number | string };
+  lastUpdated: string;
 }
 
 export interface WellPadData {
+  id: string;
   name: string;
+  location: string;
   wells: WellData[];
-  status: 'good' | 'warning' | 'alert';  // Added status
-  totalWells: number;      // Changed from wellCount
-  activeWells: number;     // Added active wells count
-  avgOilRate: number;      // Changed from totalProduction
-  avgWaterCut: number;     // Changed from averageWaterCut
-  isConnectedToPI?: boolean; // Optional flag to indicate PI connection status
+  totalOilRate: number;
+  totalGasRate: number;
+  totalWaterRate: number;
+  averagePressure: number;
+  lastUpdated: string;
 }
 
 // PI AF Connection Status
@@ -104,25 +82,25 @@ export interface AttributeMapping {
 }
 
 export const DEFAULT_ATTRIBUTE_MAPPING: AttributeMapping = {
-  oilRate: 'Oil_Rate',
-  liquidRate: 'Liquid_Rate',
-  waterCut: 'Water_Cut',
-  espFrequency: 'ESP_Frequency',
-  planTarget: 'Plan_Target',
+  oilRate: 'Oil Production Rate',
+  liquidRate: 'Total Liquid Rate',
+  waterCut: 'Water Cut Percentage',
+  espFrequency: 'ESP Motor Frequency',
+  planTarget: 'Daily Production Target',
   // Extended default mappings
-  gasRate: 'Gas_Rate',
-  tubingPressure: 'Tubing_Pressure',
-  casingPressure: 'Casing_Pressure',
+  gasRate: 'Gas Production Rate',
+  tubingPressure: 'Tubing Head Pressure',
+  casingPressure: 'Casing Pressure',
   temperature: 'Temperature',
-  flowlinePressure: 'Flowline_Pressure',
-  chokeSize: 'Choke_Size',
-  gasLiftRate: 'Gas_Lift_Rate',
-  pumpSpeed: 'Pump_Speed',
-  motorAmps: 'Motor_Amps',
+  flowlinePressure: 'Flowline Pressure',
+  chokeSize: 'Choke Size',
+  gasLiftRate: 'Gas Lift Rate',
+  pumpSpeed: 'Pump Speed',
+  motorAmps: 'Motor Amps',
   vibration: 'Vibration',
   runtime: 'Runtime',
-  shutinTime: 'Shutin_Time',
-  wellheadPressure: 'Wellhead_Pressure',
-  bottomholePressure: 'Bottomhole_Pressure',
-  flowRate: 'Flow_Rate'
+  shutinTime: 'Shutin Time',
+  wellheadPressure: 'Wellhead Pressure',
+  bottomholePressure: 'Bottomhole Pressure',
+  flowRate: 'Flow Rate'
 };

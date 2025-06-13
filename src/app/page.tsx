@@ -5,7 +5,6 @@ import { Droplets, TrendingUp, TrendingDown, CheckCircle, Zap, Settings, Refresh
 import PISystemConfig from '@/components/PISystemConfig';
 import DynamicWellPadLayout from '@/components/DynamicWellPadLayout';
 import { WellPadData, WellData, AttributeMapping } from '@/types/pi-system';
-import { PIAFService } from '@/services/pi-af-service';
 
 export default function Home() {
   const [wellPads, setWellPads] = useState<WellPadData[]>([]);
@@ -31,6 +30,12 @@ export default function Home() {
           configResult.config.piServerConfig?.piWebApiServerName) {
         
         console.log('🔍 Production mode detected - attempting PI AF data loading...');
+        console.log('📋 Config validation:', {
+          success: configResult.success,
+          mode: configResult.config.mode,
+          hasServerName: !!configResult.config.piServerConfig?.piWebApiServerName,
+          config: configResult.config
+        });
         
         // Try to load real PI AF data
         try {
@@ -54,7 +59,12 @@ export default function Home() {
           setDataSource('simulated');
         }
       } else {
-        console.log('ℹ️ Development mode or no PI configuration - using simulated data');
+        console.log('ℹ️ Not using production PI data loading. Reason:', {
+          success: configResult.success,
+          mode: configResult.config?.mode,
+          hasServerName: !!configResult.config?.piServerConfig?.piWebApiServerName,
+          fullConfig: configResult
+        });
         setDataSource('simulated');
       }
       
@@ -79,154 +89,47 @@ export default function Home() {
     }
   }, []);
 
-  // Load real PI data using the new PI AF service
+  // Load real PI data using the API endpoint
   const loadRealPIData = async (config: any): Promise<WellPadData[] | null> => {
     try {
-      console.log('🔍 Attempting to load real PI AF data...');
+      console.log('🔍 Attempting to load real PI AF data via API...');
       
-      // Validate required configuration
-      if (!config.piServerConfig || !config.piServerConfig.afServerName || 
-          !config.piServerConfig.piWebApiServerName || !config.piServerConfig.afDatabaseName) {
-        console.log('❌ Incomplete PI configuration for real data loading');
-        return null;
-      }
-
-      // Create PI AF service instance with custom attribute mapping
-      const piafService = new PIAFService(config.piServerConfig, config.attributeMapping);
+      const response = await fetch('/api/pi-system/load-data');
+      const result = await response.json();
       
-      // Load wellpad data from PI AF
-      const wellPads = await piafService.loadWellPadData();
-      
-      if (wellPads && wellPads.length > 0) {
-        console.log(`🎉 Successfully loaded ${wellPads.length} wellpads from PI AF`);
-        return wellPads;
+      if (result.success && result.data) {
+        console.log(`🎉 Successfully loaded ${result.data.length} wellpads from PI AF`);
+        return result.data;
       } else {
-        console.log('⚠️ No wellpad data found in PI AF, falling back to simulated data');
+        console.log(`⚠️ PI AF data loading failed: ${result.error}`);
         return null;
       }
       
     } catch (error) {
-      console.error('❌ Error loading real PI AF data:', error);
+      console.error('❌ Error calling PI AF data API:', error);
       return null;
     }
   };
 
-  // Generate simulated data using PI AF service with attribute mapping
+  // Generate simulated data using API endpoint with attribute mapping
   const generateSimulatedDataWithMapping = async (): Promise<WellPadData[]> => {
     try {
-      console.log('🔧 Generating simulated data with attribute mapping...');
+      console.log('🔧 Loading simulated data with attribute mapping via API...');
       
-      // Get configuration (including attribute mapping) via API
-      const response = await fetch('/api/pi-system/config');
+      const response = await fetch('/api/pi-system/simulated-data');
       const result = await response.json();
       
-      if (result.success && result.config && result.config.attributeMapping) {
-        console.log('🎯 Using custom attribute mapping for simulated data:', result.config.attributeMapping);
-        // Generate enhanced simulated data that respects attribute mapping
-        return generateSimulatedDataWithAttributeMapping(result.config.attributeMapping);
+      if (result.success && result.data) {
+        console.log('🎯 Successfully loaded simulated data with attribute mapping:', result.attributeMapping);
+        return result.data;
       } else {
-        console.log('⚠️ No attribute mapping found, using default simulated data');
-        return generateSimulatedData();
+        console.log('⚠️ Failed to load simulated data via API, using empty fallback');
+        return [];
       }
     } catch (error) {
-      console.error('❌ Error generating simulated data with mapping:', error);
-      return generateSimulatedData();
+      console.error('❌ Error loading simulated data via API:', error);
+      return [];
     }
-  };
-
-  // Generate enhanced simulated data that reflects the custom attribute mapping
-  const generateSimulatedDataWithAttributeMapping = (attributeMapping: AttributeMapping): WellPadData[] => {
-    console.log('🎯 Using custom attribute mapping for simulated data:', attributeMapping);
-    
-    const wellPads: WellPadData[] = [];
-    
-    for (let padNum = 1; padNum <= 10; padNum++) {
-      const wellCount = Math.floor(Math.random() * 11) + 10;
-      const wells: WellData[] = [];
-      
-      for (let wellNum = 0; wellNum < wellCount; wellNum++) {
-        const wellNumber = Math.floor(Math.random() * 900) + 100;
-        const oilRate = Math.floor(Math.random() * 150) + 50;
-        const liquidRate = Math.floor(oilRate * (1 + Math.random() * 0.5));
-        const waterCut = Math.floor(Math.random() * 30) + 5;
-        const espFrequency = Math.floor(Math.random() * 20) + 40;
-        const planTarget = oilRate + Math.floor(Math.random() * 40) - 20;
-        const deviation = planTarget > 0 ? ((oilRate - planTarget) / planTarget * 100) : 0;
-        
-        let status: 'good' | 'warning' | 'alert' = 'good';
-        if (Math.abs(deviation) > 15 || waterCut > 25) status = 'alert';
-        else if (Math.abs(deviation) > 10 || waterCut > 20) status = 'warning';
-        
-        // Create base well with core attributes
-        const baseWell: WellData = {
-          name: `PL-${wellNumber.toString().padStart(3, '0')}`,
-          wellPadName: `WellPad ${padNum.toString().padStart(2, '0')}`,
-          oilRate,
-          liquidRate,
-          waterCut,
-          espFrequency,
-          planTarget,
-          planDeviation: Math.round(deviation * 10) / 10,
-          status,
-          lastUpdate: new Date()
-        };
-
-        // Add extended attributes based on what's configured in attribute mapping
-        // This shows that the mapping is being used and makes the data more realistic
-        if (attributeMapping.gasRate) {
-          console.log(`   ✅ Adding gasRate (mapped to "${attributeMapping.gasRate}")`);
-          baseWell.gasRate = Math.floor(Math.random() * 500) + 100;
-        }
-        if (attributeMapping.tubingPressure) {
-          console.log(`   ✅ Adding tubingPressure (mapped to "${attributeMapping.tubingPressure}")`);
-          baseWell.tubingPressure = Math.floor(Math.random() * 200) + 800;
-        }
-        if (attributeMapping.casingPressure) {
-          baseWell.casingPressure = Math.floor(Math.random() * 300) + 600;
-        }
-        if (attributeMapping.temperature) {
-          baseWell.temperature = Math.floor(Math.random() * 50) + 180;
-        }
-        if (attributeMapping.flowlinePressure) {
-          baseWell.flowlinePressure = Math.floor(Math.random() * 150) + 400;
-        }
-        if (attributeMapping.chokeSize) {
-          baseWell.chokeSize = Math.floor(Math.random() * 16) + 8;
-        }
-        if (attributeMapping.motorAmps) {
-          baseWell.motorAmps = Math.floor(Math.random() * 30) + 20;
-        }
-
-        // Add some random additional attributes for wells that have extended mapping
-        if (Math.random() > 0.8 && Object.keys(attributeMapping).length > 5) {
-          baseWell.customAttributes = {
-            'Pump_Intake_Pressure': Math.floor(Math.random() * 100) + 300,
-            'Surface_Temperature': Math.floor(Math.random() * 20) + 60,
-          };
-        }
-
-        wells.push(baseWell);
-      }
-      
-      const avgOilRate = wells.reduce((sum, w) => sum + w.oilRate, 0) / wells.length;
-      const avgWaterCut = wells.reduce((sum, w) => sum + w.waterCut, 0) / wells.length;
-      const status = wells.some(w => w.status === 'alert') ? 'alert' : 
-                    wells.some(w => w.status === 'warning') ? 'warning' : 'good';
-      
-      wellPads.push({
-        name: `WellPad ${padNum.toString().padStart(2, '0')}`,
-        wells,
-        status,
-        totalWells: wells.length,
-        activeWells: wells.filter(w => w.status !== 'alert').length,
-        avgOilRate,
-        avgWaterCut,
-        isConnectedToPI: false
-      });
-    }
-    
-    console.log(`🎉 Generated ${wellPads.length} wellpads with custom attribute mapping`);
-    return wellPads;
   };
 
   // Calculate dynamic statistics based on available data
@@ -235,51 +138,34 @@ export default function Home() {
 
     const allWells = wellPads.flatMap(pad => pad.wells);
     const totalWells = allWells.length;
-    const totalOilProduction = wellPads.reduce((sum, pad) => sum + (pad.avgOilRate * pad.totalWells), 0);
-    const totalLiquidProduction = allWells.reduce((sum, well) => sum + well.liquidRate, 0);
-    const avgWaterCut = wellPads.reduce((sum, pad) => sum + pad.avgWaterCut, 0) / wellPads.length;
     
-    // Calculate extended statistics if data is available
-    const wellsWithGasRate = allWells.filter(well => well.gasRate !== undefined);
-    const totalGasProduction = wellsWithGasRate.reduce((sum, well) => sum + (well.gasRate || 0), 0);
+    // Calculate totals from wellpad data since it's already aggregated
+    const totalOilProduction = wellPads.reduce((sum, pad) => sum + pad.totalOilRate, 0);
+    const totalGasProduction = wellPads.reduce((sum, pad) => sum + pad.totalGasRate, 0);
+    const totalWaterProduction = wellPads.reduce((sum, pad) => sum + pad.totalWaterRate, 0);
+    const avgPressure = wellPads.reduce((sum, pad) => sum + pad.averagePressure, 0) / wellPads.length;
     
-    const wellsWithTubingPressure = allWells.filter(well => well.tubingPressure !== undefined);
-    const avgTubingPressure = wellsWithTubingPressure.length > 0 
-      ? wellsWithTubingPressure.reduce((sum, well) => sum + (well.tubingPressure || 0), 0) / wellsWithTubingPressure.length
-      : undefined;
-
-    const wellsWithTemperature = allWells.filter(well => well.temperature !== undefined);
-    const avgTemperature = wellsWithTemperature.length > 0
-      ? wellsWithTemperature.reduce((sum, well) => sum + (well.temperature || 0), 0) / wellsWithTemperature.length
-      : undefined;
-
+    // Calculate status counts from well data
     const statusCounts = {
-      good: allWells.filter(w => w.status === 'good').length,
-      warning: allWells.filter(w => w.status === 'warning').length,
-      alert: allWells.filter(w => w.status === 'alert').length
+      active: allWells.filter(w => w.status === 'active').length,
+      inactive: allWells.filter(w => w.status === 'inactive').length
     };
 
-    // Get list of all unique attributes across wells for analytics
+    // Get list of all unique attribute names across wells
     const allAttributes = new Set<string>();
     allWells.forEach(well => {
-      Object.keys(well).forEach(key => {
-        if (typeof well[key as keyof WellData] === 'number' && key !== 'planDeviation') {
-          allAttributes.add(key);
-        }
-      });
-      if (well.customAttributes) {
-        Object.keys(well.customAttributes).forEach(key => allAttributes.add(`custom_${key}`));
+      if (well.attributes) {
+        Object.keys(well.attributes).forEach(key => allAttributes.add(key));
       }
     });
 
     return {
       totalWells,
       totalOilProduction: Math.round(totalOilProduction),
-      totalLiquidProduction: Math.round(totalLiquidProduction),
+      totalLiquidProduction: Math.round(totalOilProduction + totalWaterProduction),
       totalGasProduction: totalGasProduction > 0 ? Math.round(totalGasProduction) : undefined,
-      avgWaterCut: Math.round(avgWaterCut),
-      avgTubingPressure: avgTubingPressure ? Math.round(avgTubingPressure) : undefined,
-      avgTemperature: avgTemperature ? Math.round(avgTemperature) : undefined,
+      avgWaterCut: totalOilProduction > 0 ? Math.round((totalWaterProduction / (totalOilProduction + totalWaterProduction)) * 100) : 0,
+      avgTubingPressure: avgPressure > 0 ? Math.round(avgPressure) : undefined,
       statusCounts,
       availableAttributes: Array.from(allAttributes),
       dataRichness: allAttributes.size // Indicates how many different data points we have
@@ -608,18 +494,13 @@ export default function Home() {
             <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
               <div className="text-sm text-slate-500 dark:text-slate-400">Well Status</div>
               <div className="flex items-center gap-2 mt-1">
-                {(dynamicStats?.statusCounts?.alert || 0) > 0 && (
+                {(dynamicStats?.statusCounts?.inactive || 0) > 0 && (
                   <span className="text-sm font-bold text-red-600">
-                    {dynamicStats?.statusCounts?.alert} ⚠️
-                  </span>
-                )}
-                {(dynamicStats?.statusCounts?.warning || 0) > 0 && (
-                  <span className="text-sm font-bold text-yellow-600">
-                    {dynamicStats?.statusCounts?.warning} ⚡
+                    {dynamicStats?.statusCounts?.inactive} ⚠️
                   </span>
                 )}
                 <span className="text-sm font-bold text-green-600">
-                  {dynamicStats?.statusCounts?.good || 0} ✅
+                  {dynamicStats?.statusCounts?.active || 0} ✅
                 </span>
               </div>
             </div>
@@ -632,17 +513,6 @@ export default function Home() {
                   {dynamicStats.avgTubingPressure}
                 </div>
                 <div className="text-xs text-slate-500 dark:text-slate-400">psi</div>
-              </div>
-            )}
-
-            {/* Average Temperature (if available) */}
-            {dynamicStats?.avgTemperature && (
-              <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
-                <div className="text-sm text-slate-500 dark:text-slate-400">Avg Temperature</div>
-                <div className="text-2xl font-bold text-red-500">
-                  {dynamicStats.avgTemperature}
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">°F</div>
               </div>
             )}
 
