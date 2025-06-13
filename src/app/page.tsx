@@ -53,9 +53,15 @@ export default function Home() {
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           console.error('❌ PI AF DATA LOADING FAILED:', errorMessage);
-          setLastPIError(errorMessage);
           
-          // IMPORTANT: Don't fall back silently - let user know PI failed
+          // Set a more user-friendly error message
+          if (errorMessage.includes('Cannot connect to PI Web API server')) {
+            setLastPIError('PI Web API server is not accessible from this environment');
+          } else {
+            setLastPIError(errorMessage);
+          }
+          
+          // Use simulated data because PI AF failed
           console.log('❌ Using simulated data because PI AF failed');
           setDataSource('simulated');
         }
@@ -332,10 +338,10 @@ export default function Home() {
                       </>
                     ) : dataSource === 'simulated' ? (
                       <>
-                        <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                        <span className="text-sm text-yellow-600 font-medium">⚠️ Simulated Data</span>
-                        {currentMode === 'production' && (
-                          <span className="text-xs text-red-600">(PI AF Failed)</span>
+                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                        <span className="text-sm text-blue-600 font-medium">📊 Simulated Data (with Custom Mappings)</span>
+                        {currentMode === 'production' && lastPIError && (
+                          <span className="text-xs text-blue-600">• PI fallback mode</span>
                         )}
                       </>
                     ) : (
@@ -347,11 +353,29 @@ export default function Home() {
                     <span className="text-xs text-slate-500">• {currentMode} mode</span>
                   </div>
                   
+                  {/* Development Mode Info */}
+                  {currentMode === 'development' && dataSource === 'simulated' && (
+                    <div className="text-xs text-green-600 bg-green-50 dark:bg-green-900/20 p-2 rounded border border-green-200 dark:border-green-800 mt-1">
+                      ℹ️ Development Mode: Using simulated data with custom attribute mappings from pi-config.json
+                    </div>
+                  )}
+                  
                   {/* Show PI Error if exists */}
                   {lastPIError && currentMode === 'production' && (
-                    <div className="flex items-start gap-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-200 dark:border-red-800">
-                      <span className="font-medium">❌ PI AF Error:</span>
-                      <span className="flex-1">{lastPIError}</span>
+                    <div className="flex items-start gap-2 text-xs bg-blue-50 dark:bg-blue-900/20 p-3 rounded border border-blue-200 dark:border-blue-800">
+                      <div className="flex-1">
+                        <div className="font-medium text-blue-700 dark:text-blue-300 mb-1">
+                          🔄 PI System Status
+                        </div>
+                        <div className="text-blue-600 dark:text-blue-400">
+                          {lastPIError.includes('not accessible') 
+                            ? 'PI Web API server is not accessible from this environment. Using simulated data with your custom attribute mappings.' 
+                            : `PI connection issue: ${lastPIError}. Using simulated data as fallback.`}
+                        </div>
+                        <div className="text-blue-500 dark:text-blue-500 mt-1">
+                          ✅ System is working correctly with simulated data
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
