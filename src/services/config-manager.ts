@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import fs from 'fs';
 import { PIServerConfig, AttributeMapping, DEFAULT_ATTRIBUTE_MAPPING } from '@/types/pi-system';
 
 export interface AppConfig {
