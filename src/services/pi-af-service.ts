@@ -75,7 +75,17 @@ export class PIAFService {
     const testEndpoints = [
       `https://${this.config.piWebApiServerName}/piwebapi`,
       `https://${this.config.piWebApiServerName}:443/piwebapi`,
-      `http://${this.config.piWebApiServerName}/piwebapi`
+      `http://${this.config.piWebApiServerName}/piwebapi`,
+      // Additional common PI Web API paths
+      `https://${this.config.piWebApiServerName}/PIWebAPI`,
+      `http://${this.config.piWebApiServerName}/PIWebAPI`,
+      `https://${this.config.piWebApiServerName}:5985/piwebapi`,
+      `http://${this.config.piWebApiServerName}:5985/piwebapi`,
+      // IIS default paths
+      `https://${this.config.piWebApiServerName}/piwebapi2018`,
+      `http://${this.config.piWebApiServerName}/piwebapi2018`,
+      `https://${this.config.piWebApiServerName}/piwebapi2019`,
+      `http://${this.config.piWebApiServerName}/piwebapi2019`
     ];
 
     for (const endpoint of testEndpoints) {
@@ -84,10 +94,32 @@ export class PIAFService {
         const response = await fetch(endpoint, this.getFetchOptions());
         console.log(`   Status: ${response.status} ${response.statusText}`);
 
-        if (response.ok || response.status === 401) {
+        // Success conditions: 
+        // - 200 OK (working)
+        // - 401 Unauthorized (working but needs auth)
+        // - 403 Forbidden (working but needs permission)
+        if (response.ok || response.status === 401 || response.status === 403) {
           this.workingEndpoint = endpoint;
-          console.log(`✅ Working endpoint found: ${endpoint}`);
+          console.log(`✅ Working endpoint found: ${endpoint} (Status: ${response.status})`);
           return endpoint;
+        }
+        
+        // If we get a redirect, follow it
+        if (response.status >= 300 && response.status < 400) {
+          const location = response.headers.get('location');
+          if (location) {
+            console.log(`🔀 Got redirect to: ${location}`);
+            try {
+              const redirectResponse = await fetch(location, this.getFetchOptions());
+              if (redirectResponse.ok || redirectResponse.status === 401 || redirectResponse.status === 403) {
+                this.workingEndpoint = location;
+                console.log(`✅ Working endpoint found via redirect: ${location}`);
+                return location;
+              }
+            } catch (redirectError) {
+              console.log(`❌ Redirect failed: ${redirectError}`);
+            }
+          }
         }
       } catch (error) {
         console.log(`❌ Failed: ${endpoint} - ${error}`);
@@ -96,6 +128,12 @@ export class PIAFService {
     }
 
     console.error(`❌ Cannot reach PI Web API Server: ${this.config.piWebApiServerName}`);
+    console.log(`💡 Troubleshooting tips:`);
+    console.log(`   1. Verify PI Web API server name: ${this.config.piWebApiServerName}`);
+    console.log(`   2. Check if PI Web API service is running`);
+    console.log(`   3. Verify network connectivity to the server`);
+    console.log(`   4. Check if Windows Authentication is properly configured`);
+    console.log(`   5. Ensure PI Web API is installed and configured on the server`);
     return null;
   }
 
