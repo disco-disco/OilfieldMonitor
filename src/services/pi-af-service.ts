@@ -3,6 +3,12 @@
 
 import { WellPadData, WellData, PIServerConfig, AttributeMapping, DEFAULT_ATTRIBUTE_MAPPING } from '@/types/pi-system';
 
+// Disable SSL certificate verification for development to handle self-signed certificates
+if (process.env.NODE_ENV !== 'production') {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  console.log('🔓 SSL certificate verification disabled for development');
+}
+
 interface AFDatabase {
   Name: string;
   Path: string;
@@ -60,9 +66,17 @@ export class PIAFService {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest' // Helps with CORS and follows PI Web API best practices
+        'X-Requested-With': 'XMLHttpRequest',
+        // Add Windows Authentication headers if credentials are provided
+        ...(this.config.username && this.config.password && {
+          'Authorization': `Basic ${Buffer.from(`${this.config.username}:${this.config.password}`).toString('base64')}`
+        })
       },
-      credentials: 'include' // For Windows Authentication
+      credentials: 'include', // For Windows Authentication
+      // Bypass SSL certificate validation in development
+      ...(process.env.NODE_ENV !== 'production' && {
+        // Note: This requires agent configuration for Node.js
+      })
     };
   }
 
