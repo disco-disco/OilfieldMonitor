@@ -103,9 +103,14 @@ export class PIAFService {
 
     console.log(`🔗 Loading databases from AF Server: ${this.config.afServerName}`);
 
+    // Use the CORRECT URL format as shown in your working example:
+    // https://%PIWEBAPI_SERVER%/piwebapi/assetdatabases?path=\\%PI_AF_SERVER%\%AF_DATABASE%
     const urlFormats = [
+      // Format 1: Direct path to specific database (your working example)
+      `${endpoint}/assetdatabases?path=\\\\${this.config.afServerName}\\${this.config.afDatabaseName}`,
+      // Format 2: All databases on specific server  
       `${endpoint}/assetservers/${encodeURIComponent(this.config.afServerName)}/assetdatabases`,
-      `${endpoint}/assetdatabases?path=\\\\${encodeURIComponent(this.config.afServerName)}`,
+      // Format 3: All databases (fallback)
       `${endpoint}/assetdatabases`
     ];
 
@@ -142,9 +147,15 @@ export class PIAFService {
 
     console.log(`🔗 Loading elements from database: ${database.Name}`);
 
+    // Use correct PI Web API path format based on your working example
     const urlFormats = [
+      // Format 1: Use Links if available (most reliable)
       database.Links?.Elements,
+      // Format 2: Direct path format (following your working syntax)
+      `${this.workingEndpoint}/elements?path=\\\\${this.config.afServerName}\\${database.Name}`,
+      // Format 3: WebID based (if available)
       database.WebId ? `${this.workingEndpoint}/assetdatabases/${database.WebId}/elements` : null,
+      // Format 4: Server/database format
       `${this.workingEndpoint}/assetservers/${encodeURIComponent(this.config.afServerName)}/assetdatabases/${encodeURIComponent(database.Name)}/elements`
     ].filter(url => url !== null && url !== undefined);
 
@@ -180,9 +191,15 @@ export class PIAFService {
 
     console.log(`🔗 Loading child elements from: ${parentElement.Name}`);
 
+    // Use correct PI Web API path format for child elements
     const urlFormats = [
+      // Format 1: Use Links if available (most reliable)
       parentElement.Links?.Elements,
+      // Format 2: WebID based (if available)
       parentElement.WebId ? `${this.workingEndpoint}/elements/${parentElement.WebId}/elements` : null,
+      // Format 3: Direct path format (following working syntax)
+      `${this.workingEndpoint}/elements?path=${encodeURIComponent(parentElement.Path)}`,
+      // Format 4: Alternative path format with field parameter
       `${this.workingEndpoint}/elements?path=${encodeURIComponent(parentElement.Path)}&field=elements`
     ].filter(url => url !== null && url !== undefined);
 

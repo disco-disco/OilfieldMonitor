@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { PIServerConfig, AttributeMapping, DEFAULT_ATTRIBUTE_MAPPING } from '@/types/pi-system';
-import { Settings, Server, Database, TestTube, CheckCircle, AlertCircle, ToggleLeft, ToggleRight, Loader2 } from 'lucide-react';
+import { Settings, Server, Database, TestTube, CheckCircle, AlertCircle, ToggleLeft, ToggleRight, Loader2, AlertTriangle } from 'lucide-react';
 
 interface PIConfigProps {
   onConfigured: () => void;
@@ -434,6 +434,16 @@ export default function PISystemConfig({ onConfigured }: PIConfigProps) {
         </div>
       </div>
     );
+  };
+
+  const clearEnvironmentVariables = () => {
+    setConfig({
+      afServerName: config.afServerName?.replace(/%[^%]*%/g, ''),
+      piWebApiServerName: config.piWebApiServerName?.replace(/%[^%]*%/g, ''),
+      afDatabaseName: config.afDatabaseName?.replace(/%[^%]*%/g, ''),
+      parentElementPath: config.parentElementPath?.replace(/%[^%]*%/g, ''),
+      templateName: config.templateName?.replace(/%[^%]*%/g, '') || '',
+    });
   };
 
   return (
