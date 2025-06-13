@@ -94,49 +94,83 @@ export class PIAFService {
     return null;
   }
 
-  // Load databases with timeout protection
+  // Load databases with WebID-based approach (CORRECT METHOD)
   private async loadDatabases(): Promise<AFDatabase[]> {
     const endpoint = await this.findWorkingEndpoint();
     if (!endpoint) {
       throw new Error('Cannot connect to PI Web API server');
     }
 
-    console.log(`🔗 Loading databases from AF Server: ${this.config.afServerName}`);
+    console.log(`🔗 Loading databases using WebID-based approach for AF Server: ${this.config.afServerName}`);
 
-    // Use the CORRECT URL format as shown in your working example:
-    // https://%PIWEBAPI_SERVER%/piwebapi/assetdatabases?path=\\%PI_AF_SERVER%\%AF_DATABASE%
-    const urlFormats = [
-      // Format 1: Direct path to specific database (your working example)
-      `${endpoint}/assetdatabases?path=\\\\${this.config.afServerName}\\${this.config.afDatabaseName}`,
-      // Format 2: All databases on specific server  
-      `${endpoint}/assetservers/${encodeURIComponent(this.config.afServerName)}/assetdatabases`,
-      // Format 3: All databases (fallback)
-      `${endpoint}/assetdatabases`
-    ];
-
-    for (const dbUrl of urlFormats) {
-      try {
-        console.log(`🔍 Trying database URL: ${dbUrl}`);
-        const response = await fetch(dbUrl, this.getFetchOptions());
-        
-        if (response.ok) {
-          const data = await response.json();
-          console.log(`✅ Database URL worked`);
-          
-          if (data.Items && Array.isArray(data.Items)) {
-            console.log(`Found ${data.Items.length} databases`);
-            return data.Items;
-          }
-        } else {
-          console.log(`❌ Database URL failed: ${this.handlePIWebAPIError(response)}`);
-        }
-      } catch (error) {
-        console.log(`❌ Database URL failed:`, error);
-        continue;
+    try {
+      // Step 1: Get all asset servers first
+      console.log(`🔍 Step 1: Getting all asset servers from: ${endpoint}/assetservers`);
+      const serversResponse = await fetch(`${endpoint}/assetservers`, this.getFetchOptions());
+      
+      if (!serversResponse.ok) {
+        console.log(`❌ Failed to get asset servers: ${this.handlePIWebAPIError(serversResponse)}`);
+        throw new Error(`Failed to get asset servers: ${this.handlePIWebAPIError(serversResponse)}`);
       }
-    }
 
-    throw new Error('Failed to load databases');
+      const serversData = await serversResponse.json();
+      console.log(`✅ Got asset servers response`);
+      
+      if (!serversData.Items || !Array.isArray(serversData.Items)) {
+        console.log(`❌ No asset servers found in response`);
+        throw new Error('No asset servers found');
+      }
+
+      console.log(`📋 Found ${serversData.Items.length} asset servers:`);
+      serversData.Items.forEach((server: any, index: number) => {
+        console.log(`   ${index + 1}. Name: "${server.Name}", WebId: "${server.WebId}"`);
+      });
+
+      // Step 2: Find the specific AF server we're looking for
+      const targetServer = serversData.Items.find((server: any) => 
+        server.Name === this.config.afServerName || 
+        server.Name.toLowerCase() === this.config.afServerName.toLowerCase()
+      );
+
+      if (!targetServer) {
+        const availableServers = serversData.Items.map((s: any) => s.Name).join(', ');
+        console.log(`❌ AF Server '${this.config.afServerName}' not found`);
+        console.log(`   Available servers: ${availableServers}`);
+        throw new Error(`AF Server '${this.config.afServerName}' not found. Available: ${availableServers}`);
+      }
+
+      console.log(`🎯 Found target AF Server: "${targetServer.Name}" (WebId: ${targetServer.WebId})`);
+
+      // Step 3: Get databases for the specific server using its WebID
+      const databasesUrl = `${endpoint}/assetservers/${targetServer.WebId}/assetdatabases`;
+      console.log(`🔍 Step 2: Getting databases from: ${databasesUrl}`);
+      
+      const databasesResponse = await fetch(databasesUrl, this.getFetchOptions());
+      
+      if (!databasesResponse.ok) {
+        console.log(`❌ Failed to get databases: ${this.handlePIWebAPIError(databasesResponse)}`);
+        throw new Error(`Failed to get databases: ${this.handlePIWebAPIError(databasesResponse)}`);
+      }
+
+      const databasesData = await databasesResponse.json();
+      console.log(`✅ Got databases response`);
+      
+      if (!databasesData.Items || !Array.isArray(databasesData.Items)) {
+        console.log(`❌ No databases found for server '${targetServer.Name}'`);
+        throw new Error(`No databases found for server '${targetServer.Name}'`);
+      }
+
+      console.log(`📋 Found ${databasesData.Items.length} databases on server '${targetServer.Name}':`);
+      databasesData.Items.forEach((db: any, index: number) => {
+        console.log(`   ${index + 1}. Name: "${db.Name}", WebId: "${db.WebId}"`);
+      });
+
+      return databasesData.Items;
+
+    } catch (error) {
+      console.error(`❌ Database loading failed:`, error);
+      throw error;
+    }
   }
 
   // Load elements from a database - NO OVERLOADING to prevent confusion
@@ -145,18 +179,16 @@ export class PIAFService {
       throw new Error('No working endpoint available');
     }
 
-    console.log(`🔗 Loading elements from database: ${database.Name}`);
+    console.log(`🔗 Loading elements from database: "${database.Name}" (WebId: ${database.WebId})`);
 
-    // Use correct PI Web API path format based on your working example
+    // Prioritize WebID-based approach for consistency
     const urlFormats = [
-      // Format 1: Use Links if available (most reliable)
-      database.Links?.Elements,
-      // Format 2: Direct path format (following your working syntax)
-      `${this.workingEndpoint}/elements?path=\\\\${this.config.afServerName}\\${database.Name}`,
-      // Format 3: WebID based (if available)
+      // Format 1: WebID based (PREFERRED - most reliable with PI Web API)
       database.WebId ? `${this.workingEndpoint}/assetdatabases/${database.WebId}/elements` : null,
-      // Format 4: Server/database format
-      `${this.workingEndpoint}/assetservers/${encodeURIComponent(this.config.afServerName)}/assetdatabases/${encodeURIComponent(database.Name)}/elements`
+      // Format 2: Use Links if available
+      database.Links?.Elements,
+      // Format 3: Direct path format (following your working syntax)
+      `${this.workingEndpoint}/elements?path=\\\\${this.config.afServerName}\\${database.Name}`,
     ].filter(url => url !== null && url !== undefined);
 
     for (const elementsUrl of urlFormats) {
@@ -189,18 +221,16 @@ export class PIAFService {
       throw new Error('No working endpoint available');
     }
 
-    console.log(`🔗 Loading child elements from: ${parentElement.Name}`);
+    console.log(`🔗 Loading child elements from: "${parentElement.Name}" (WebId: ${parentElement.WebId})`);
 
-    // Use correct PI Web API path format for child elements
+    // Prioritize WebID-based approach for consistency
     const urlFormats = [
-      // Format 1: Use Links if available (most reliable)
-      parentElement.Links?.Elements,
-      // Format 2: WebID based (if available)
+      // Format 1: WebID based (PREFERRED - most reliable with PI Web API)
       parentElement.WebId ? `${this.workingEndpoint}/elements/${parentElement.WebId}/elements` : null,
+      // Format 2: Use Links if available
+      parentElement.Links?.Elements,
       // Format 3: Direct path format (following working syntax)
       `${this.workingEndpoint}/elements?path=${encodeURIComponent(parentElement.Path)}`,
-      // Format 4: Alternative path format with field parameter
-      `${this.workingEndpoint}/elements?path=${encodeURIComponent(parentElement.Path)}&field=elements`
     ].filter(url => url !== null && url !== undefined);
 
     for (const elementsUrl of urlFormats) {

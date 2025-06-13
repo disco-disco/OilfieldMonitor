@@ -1,5 +1,6 @@
 import { PIServerConfig, PIElement, WellData, WellPadData, AttributeMapping } from '@/types/pi-system';
 import { configManager } from './config-manager';
+import { PIAFService } from './pi-af-service';
 
 export interface PIConnectionTestResult {
   success: boolean;
@@ -483,46 +484,27 @@ export class PISystemService {
   /**
    * Read actual data from PI System (production)
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  private async readFromPI(_config: PIServerConfig): Promise<WellPadData[]> {
+  private async readFromPI(config: PIServerConfig): Promise<WellPadData[]> {
     try {
-      // This would implement actual PI AF reading logic
-      // Example pseudo-code:
-      /*
-      const piWebApiClient = new PIWebAPIClient({
-        serverUrl: `https://${config.afServerName}/piwebapi`,
-        username: config.username,
-        password: config.password
-      });
+      console.log('🔍 Reading PI data using WebID-based PI AF Service...');
       
-      const database = await piWebApiClient.assetDatabase.getByName(config.afDatabaseName);
-      const parentElement = await piWebApiClient.element.getByPath(config.parentElementPath);
-      const wellPads = await piWebApiClient.element.getElements(parentElement.WebId, {
-        templateName: config.templateName
-      });
+      // Get attribute mapping
+      const attributeMapping = configManager.getAttributeMapping();
       
-      const wellPadData: WellPadData[] = [];
+      // Create PI AF service instance with WebID-based navigation
+      const piAfService = new PIAFService(config, attributeMapping);
       
-      for (const wellPad of wellPads) {
-        const wells = await this.readWellsFromPad(wellPad);
-        wellPadData.push({
-          name: wellPad.Name,
-          wells: wells,
-          totalProduction: wells.reduce((sum, well) => sum + well.oilRate, 0),
-          averageWaterCut: wells.reduce((sum, well) => sum + well.waterCut, 0) / wells.length,
-          wellCount: wells.length
-        });
-      }
+      // Load wellpad data using the updated service
+      const wellPadData = await piAfService.loadWellPadData();
       
+      console.log(`✅ Successfully loaded ${wellPadData.length} wellpads from PI System`);
       return wellPadData;
-      */
       
-      console.log('Reading from PI System in production mode');
-      // For now, return simulated data until actual PI integration is implemented
-      return this.generateSimulatedData();
     } catch (error) {
-      console.error('Failed to read from PI System:', error);
-      // Fallback to simulated data on error
+      console.error('❌ Failed to read from PI System:', error);
+      
+      // Fallback to simulated data if PI reading fails
+      console.log('🔄 Falling back to simulated data due to PI System error');
       return this.generateSimulatedData();
     }
   }
@@ -598,18 +580,22 @@ export class PISystemService {
           liquidRate,
           waterCut,
           espFrequency,
+          planTarget,
           planDeviation: Math.round(deviation * 10) / 10,
           status,
-          lastUpdated: new Date()
+          lastUpdate: new Date()
         });
       }
       
       wellPads.push({
         name: `WellPad ${padNum.toString().padStart(2, '0')}`,
         wells,
-        totalProduction: wells.reduce((sum, well) => sum + well.oilRate, 0),
-        averageWaterCut: wells.reduce((sum, well) => sum + well.waterCut, 0) / wells.length,
-        wellCount: wells.length
+        status: 'good',
+        totalWells: wells.length,
+        activeWells: wells.filter(w => w.status !== 'alert').length,
+        avgOilRate: wells.reduce((sum, well) => sum + well.oilRate, 0) / wells.length,
+        avgWaterCut: wells.reduce((sum, well) => sum + well.waterCut, 0) / wells.length,
+        isConnectedToPI: false
       });
     }
     
