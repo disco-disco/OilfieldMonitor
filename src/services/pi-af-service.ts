@@ -46,7 +46,12 @@ export class PIAFService {
   constructor(config: PIServerConfig, attributeMapping?: AttributeMapping) {
     this.config = config;
     this.attributeMapping = attributeMapping || DEFAULT_ATTRIBUTE_MAPPING;
-    console.log('🎯 PI AF Service initialized with attribute mapping:', this.attributeMapping);
+    console.log('🎯 PI AF Service initialized with configuration:');
+    console.log(`   - AF Server: ${config.afServerName}`);
+    console.log(`   - Database: ${config.afDatabaseName}`);
+    console.log(`   - Element Path: ${config.elementPath}`);
+    console.log(`   - Template Filter: ${config.templateName || 'None (processing all elements)'}`);
+    console.log('🎯 Attribute mapping:', this.attributeMapping);
   }
 
   private getFetchOptions(): RequestInit {
@@ -391,11 +396,30 @@ export class PIAFService {
             continue;
           }
 
+          console.log(`📋 Found ${wellElements.length} child elements in ${wellpadElement.Name}:`);
+          wellElements.forEach((el, idx) => {
+            console.log(`   ${idx + 1}. "${el.Name}" - Template: "${el.TemplateName || 'None'}"`);
+          });
+
+          // Apply template filtering if configured
+          let filteredWellElements = wellElements;
+          if (this.config.templateName && this.config.templateName.trim() !== '') {
+            filteredWellElements = wellElements.filter(el => 
+              el.TemplateName && 
+              el.TemplateName.toLowerCase() === this.config.templateName.toLowerCase()
+            );
+            console.log(`🎯 Template filter "${this.config.templateName}" applied: ${filteredWellElements.length}/${wellElements.length} elements match`);
+          } else {
+            console.log(`⚠️ No template filter configured - processing all ${wellElements.length} elements`);
+          }
+
           const wells: WellData[] = [];
-          const maxWells = Math.min(wellElements.length, 20); // MAX 20 wells per pad
+          const maxWells = Math.min(filteredWellElements.length, 20); // MAX 20 wells per pad
 
           for (let j = 0; j < maxWells; j++) {
-            const wellElement = wellElements[j];
+            const wellElement = filteredWellElements[j];
+            
+            console.log(`🔧 Processing well ${j + 1}/${maxWells}: "${wellElement.Name}" (Template: "${wellElement.TemplateName || 'None'}")`);
             
             try {
               const attributes = await this.loadAttributes(wellElement);
@@ -403,6 +427,7 @@ export class PIAFService {
               
               if (wellData) {
                 wells.push(wellData);
+                console.log(`✅ Successfully processed well: ${wellElement.Name}`);
               }
             } catch (error) {
               console.log(`❌ Failed to process well ${wellElement.Name}:`, error);
@@ -426,7 +451,9 @@ export class PIAFService {
             wellPadData.wells.forEach(well => well.wellPadName = wellPadData.name);
             result.push(wellPadData);
             
-            console.log(`✅ Processed wellpad ${wellpadElement.Name}: ${wells.length} wells`);
+            console.log(`✅ Processed wellpad ${wellpadElement.Name}: ${wells.length} wells (${filteredWellElements.length} total after filtering)`);
+          } else {
+            console.log(`⚠️ No wells processed for ${wellpadElement.Name} - filtered elements: ${filteredWellElements.length}`);
           }
         } catch (error) {
           console.log(`❌ Error processing wellpad ${wellpadElement.Name}:`, error);
