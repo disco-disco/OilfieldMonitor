@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Droplets, TrendingUp, TrendingDown, CheckCircle, Zap, Settings, RefreshCw, BarChart3, Activity } from "lucide-react";
 import PISystemConfig from '@/components/PISystemConfig';
 import DynamicWellPadLayout from '@/components/DynamicWellPadLayout';
-import { WellPadData, WellData } from '@/types/pi-system';
+import { WellPadData, WellData, AttributeMapping } from '@/types/pi-system';
 import { PIAFService } from '@/services/pi-af-service';
 
 export default function Home() {
@@ -59,15 +59,20 @@ export default function Home() {
       }
       
       // Use simulated data (either no config, development mode, or PI connection failed)
-      console.log('📊 Loading simulated data...');
-      setWellPads(generateSimulatedData());
+      console.log('📊 Loading simulated data with attribute mapping...');
+      const simulatedData = await generateSimulatedDataWithMapping();
+      setWellPads(simulatedData);
       setLastUpdated(new Date());
       
     } catch (error) {
       console.error('Error in loadWellPadData:', error);
       setLastPIError(error instanceof Error ? error.message : String(error));
       setDataSource('simulated');
-      setWellPads(generateSimulatedData());
+      
+      // Use simulated data with attribute mapping when error occurs
+      console.log('📊 Loading simulated data with attribute mapping (error fallback)...');
+      const simulatedData = await generateSimulatedDataWithMapping();
+      setWellPads(simulatedData);
       setLastUpdated(new Date());
     } finally {
       setIsLoading(false);
@@ -104,6 +109,124 @@ export default function Home() {
       console.error('❌ Error loading real PI AF data:', error);
       return null;
     }
+  };
+
+  // Generate simulated data using PI AF service with attribute mapping
+  const generateSimulatedDataWithMapping = async (): Promise<WellPadData[]> => {
+    try {
+      console.log('🔧 Generating simulated data with attribute mapping...');
+      
+      // Get configuration (including attribute mapping) via API
+      const response = await fetch('/api/pi-system/config');
+      const result = await response.json();
+      
+      if (result.success && result.config && result.config.attributeMapping) {
+        console.log('🎯 Using custom attribute mapping for simulated data:', result.config.attributeMapping);
+        // Generate enhanced simulated data that respects attribute mapping
+        return generateSimulatedDataWithAttributeMapping(result.config.attributeMapping);
+      } else {
+        console.log('⚠️ No attribute mapping found, using default simulated data');
+        return generateSimulatedData();
+      }
+    } catch (error) {
+      console.error('❌ Error generating simulated data with mapping:', error);
+      return generateSimulatedData();
+    }
+  };
+
+  // Generate enhanced simulated data that reflects the custom attribute mapping
+  const generateSimulatedDataWithAttributeMapping = (attributeMapping: AttributeMapping): WellPadData[] => {
+    console.log('🎯 Using custom attribute mapping for simulated data:', attributeMapping);
+    
+    const wellPads: WellPadData[] = [];
+    
+    for (let padNum = 1; padNum <= 10; padNum++) {
+      const wellCount = Math.floor(Math.random() * 11) + 10;
+      const wells: WellData[] = [];
+      
+      for (let wellNum = 0; wellNum < wellCount; wellNum++) {
+        const wellNumber = Math.floor(Math.random() * 900) + 100;
+        const oilRate = Math.floor(Math.random() * 150) + 50;
+        const liquidRate = Math.floor(oilRate * (1 + Math.random() * 0.5));
+        const waterCut = Math.floor(Math.random() * 30) + 5;
+        const espFrequency = Math.floor(Math.random() * 20) + 40;
+        const planTarget = oilRate + Math.floor(Math.random() * 40) - 20;
+        const deviation = planTarget > 0 ? ((oilRate - planTarget) / planTarget * 100) : 0;
+        
+        let status: 'good' | 'warning' | 'alert' = 'good';
+        if (Math.abs(deviation) > 15 || waterCut > 25) status = 'alert';
+        else if (Math.abs(deviation) > 10 || waterCut > 20) status = 'warning';
+        
+        // Create base well with core attributes
+        const baseWell: WellData = {
+          name: `PL-${wellNumber.toString().padStart(3, '0')}`,
+          wellPadName: `WellPad ${padNum.toString().padStart(2, '0')}`,
+          oilRate,
+          liquidRate,
+          waterCut,
+          espFrequency,
+          planTarget,
+          planDeviation: Math.round(deviation * 10) / 10,
+          status,
+          lastUpdate: new Date()
+        };
+
+        // Add extended attributes based on what's configured in attribute mapping
+        // This shows that the mapping is being used and makes the data more realistic
+        if (attributeMapping.gasRate) {
+          console.log(`   ✅ Adding gasRate (mapped to "${attributeMapping.gasRate}")`);
+          baseWell.gasRate = Math.floor(Math.random() * 500) + 100;
+        }
+        if (attributeMapping.tubingPressure) {
+          console.log(`   ✅ Adding tubingPressure (mapped to "${attributeMapping.tubingPressure}")`);
+          baseWell.tubingPressure = Math.floor(Math.random() * 200) + 800;
+        }
+        if (attributeMapping.casingPressure) {
+          baseWell.casingPressure = Math.floor(Math.random() * 300) + 600;
+        }
+        if (attributeMapping.temperature) {
+          baseWell.temperature = Math.floor(Math.random() * 50) + 180;
+        }
+        if (attributeMapping.flowlinePressure) {
+          baseWell.flowlinePressure = Math.floor(Math.random() * 150) + 400;
+        }
+        if (attributeMapping.chokeSize) {
+          baseWell.chokeSize = Math.floor(Math.random() * 16) + 8;
+        }
+        if (attributeMapping.motorAmps) {
+          baseWell.motorAmps = Math.floor(Math.random() * 30) + 20;
+        }
+
+        // Add some random additional attributes for wells that have extended mapping
+        if (Math.random() > 0.8 && Object.keys(attributeMapping).length > 5) {
+          baseWell.customAttributes = {
+            'Pump_Intake_Pressure': Math.floor(Math.random() * 100) + 300,
+            'Surface_Temperature': Math.floor(Math.random() * 20) + 60,
+          };
+        }
+
+        wells.push(baseWell);
+      }
+      
+      const avgOilRate = wells.reduce((sum, w) => sum + w.oilRate, 0) / wells.length;
+      const avgWaterCut = wells.reduce((sum, w) => sum + w.waterCut, 0) / wells.length;
+      const status = wells.some(w => w.status === 'alert') ? 'alert' : 
+                    wells.some(w => w.status === 'warning') ? 'warning' : 'good';
+      
+      wellPads.push({
+        name: `WellPad ${padNum.toString().padStart(2, '0')}`,
+        wells,
+        status,
+        totalWells: wells.length,
+        activeWells: wells.filter(w => w.status !== 'alert').length,
+        avgOilRate,
+        avgWaterCut,
+        isConnectedToPI: false
+      });
+    }
+    
+    console.log(`🎉 Generated ${wellPads.length} wellpads with custom attribute mapping`);
+    return wellPads;
   };
 
   // Calculate dynamic statistics based on available data
