@@ -2,6 +2,62 @@ import { NextRequest, NextResponse } from 'next/server';
 import { configManager } from '@/services/config-manager';
 import { WellPadData, WellData, AttributeMapping, DEFAULT_ATTRIBUTE_MAPPING } from '@/types/pi-system';
 
+// Define server-side PI AF service interface for production connections
+interface ServerPIAFService {
+  testConnection(): Promise<{ success: boolean; message: string }>;
+  loadWellPadData(): Promise<WellPadData[]>;
+}
+
+// Simple server-side PI AF service for production mode connections
+// This attempts to make direct HTTP calls to PI Web API from the server
+class ServerPIAFService implements ServerPIAFService {
+  private serverConfig: any;
+  private attributeMapping: AttributeMapping;
+
+  constructor(serverConfig: any, attributeMapping: AttributeMapping) {
+    this.serverConfig = serverConfig;
+    this.attributeMapping = attributeMapping;
+  }
+
+  async testConnection(): Promise<{ success: boolean; message: string }> {
+    try {
+      const piWebApiUrl = `https://${this.serverConfig.piWebApiServerName}/piwebapi`;
+      
+      // Simple connectivity test to PI Web API root endpoint
+      const response = await fetch(piWebApiUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+        // Note: Server-side requests from Node.js cannot use Windows authentication
+        // This will likely fail in production environments requiring Windows auth
+      });
+
+      if (response.ok) {
+        return { success: true, message: 'Connected to PI Web API' };
+      } else {
+        return { success: false, message: `PI Web API returned status ${response.status}` };
+      }
+    } catch (error) {
+      return { 
+        success: false, 
+        message: `Cannot connect to PI Web API server: ${error instanceof Error ? error.message : String(error)}` 
+      };
+    }
+  }
+
+  async loadWellPadData(): Promise<WellPadData[]> {
+    // This is a placeholder - in a real implementation you would:
+    // 1. Connect to PI AF using the server config
+    // 2. Query the AF database for wellpad elements
+    // 3. Read attribute values using the custom attribute mapping
+    // 4. Return structured wellpad data
+    
+    // For now, return empty array since server-side Windows auth is problematic
+    throw new Error('Server-side PI AF connections require Windows authentication which is not available in Node.js');
+  }
+}
+
 // Generate simulated data that respects custom attribute mappings
 function generateSimulatedDataWithAttributeMapping(attributeMapping: AttributeMapping): WellPadData[] {
   console.log('🎯 Generating simulated data with custom attribute mapping:', attributeMapping);
@@ -116,10 +172,68 @@ function generateDefaultSimulatedData(): WellPadData[] {
 
 export async function GET() {
   try {
-    console.log('🔧 API: Generating simulated data with attribute mapping...');
+    console.log('🔧 API: Checking production mode and attempting PI connection...');
     
-    // Get configuration (including attribute mapping)
+    // Get configuration
     const config = configManager.getConfig();
+    
+    // Check if we're in production mode and should try PI connection first
+    if (config && config.mode === 'production' && config.piServerConfig?.piWebApiServerName) {
+      console.log('🔍 Production mode detected in API - attempting real PI AF data loading...');
+      console.log('📋 PI Server config:', {
+        mode: config.mode,
+        server: config.piServerConfig.piWebApiServerName,
+        database: config.piServerConfig.afDatabaseName
+      });
+      
+      try {
+        // Import and use the client-side PI AF service
+        const { ClientPIAFService } = await import('@/services/pi-af-client');
+        
+        // Create client-side PI AF service instance
+        const clientPIAFService = new ClientPIAFService(
+          config.piServerConfig,
+          config.attributeMapping || {}
+        );
+        
+        console.log('🔍 Testing PI connection via API...');
+        const connectionTest = await clientPIAFService.testConnection();
+        
+        if (connectionTest.success) {
+          console.log('✅ API: PI AF connection successful, loading real data...');
+          
+          // Load real wellpad data
+          const realWellPads = await clientPIAFService.loadWellPadData();
+          
+          if (realWellPads && realWellPads.length > 0) {
+            console.log(`🎉 API: Successfully loaded ${realWellPads.length} wellpads from real PI AF`);
+            return NextResponse.json({
+              success: true,
+              data: realWellPads,
+              source: 'pi-af',
+              attributeMapping: config.attributeMapping,
+              timestamp: new Date().toISOString(),
+              piConnection: 'success'
+            });
+          } else {
+            console.log('⚠️ API: No wellpad data found via PI AF, falling back to simulated');
+          }
+        } else {
+          console.log(`⚠️ API: PI AF connection failed: ${connectionTest.message}, falling back to simulated`);
+        }
+        
+      } catch (piError) {
+        const piErrorMessage = piError instanceof Error ? piError.message : String(piError);
+        console.error('❌ API: PI AF connection error:', piErrorMessage);
+        
+        // Continue to simulated data with the PI error info
+      }
+    } else {
+      console.log('ℹ️ API: Not in production mode or no PI server configured, using simulated data');
+    }
+    
+    // Fall back to simulated data (either no production mode, or PI connection failed)
+    console.log('🔧 API: Generating simulated data with attribute mapping...');
     
     if (config && config.attributeMapping) {
       console.log('🎯 Using custom attribute mapping for simulated data:', config.attributeMapping);
