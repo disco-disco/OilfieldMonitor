@@ -53,7 +53,9 @@ export class PIAFService {
     return {
       method: 'GET',
       headers: {
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest' // Helps with CORS and follows PI Web API best practices
       },
       credentials: 'include' // For Windows Authentication
     };
@@ -120,6 +122,8 @@ export class PIAFService {
             console.log(`Found ${data.Items.length} databases`);
             return data.Items;
           }
+        } else {
+          console.log(`❌ Database URL failed: ${this.handlePIWebAPIError(response)}`);
         }
       } catch (error) {
         console.log(`❌ Database URL failed:`, error);
@@ -518,6 +522,36 @@ export class PIAFService {
         error: 'Validation failed',
         details: error instanceof Error ? error.message : String(error)
       };
+    }
+  }
+
+  // WebID validation following PI Web API standards
+  private isValidWebId(webId: string | undefined): boolean {
+    if (!webId) return false;
+    // PI Web API WebIDs are base64-encoded strings with specific patterns
+    // They typically contain alphanumeric characters, hyphens, and underscores
+    return /^[A-Za-z0-9_-]+$/.test(webId) && webId.length > 10;
+  }
+
+  // Enhanced error handling for PI Web API specific status codes
+  private handlePIWebAPIError(response: Response): string {
+    switch (response.status) {
+      case 400:
+        return 'Bad Request - Check path/WebID format or query parameters';
+      case 401:
+        return 'Unauthorized - Windows Authentication required. Ensure you are on a domain-joined machine.';
+      case 403:
+        return 'Forbidden - Check PI AF security permissions for the current user';
+      case 404:
+        return 'Not Found - The specified path, WebID, or resource does not exist';
+      case 500:
+        return 'Internal Server Error - PI Web API server encountered an error';
+      case 502:
+        return 'Bad Gateway - PI Web API cannot reach the PI AF Server';
+      case 503:
+        return 'Service Unavailable - PI Web API service is temporarily unavailable';
+      default:
+        return `HTTP ${response.status} ${response.statusText}`;
     }
   }
 }
