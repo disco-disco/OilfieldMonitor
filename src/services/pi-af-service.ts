@@ -478,6 +478,7 @@ export class PIAFService {
   private mapAttributesToWellData(element: AFElement, attributes: AFAttribute[]): WellData | null {
     try {
       console.log(`🎯 Mapping attributes for: ${element.Name}`);
+      console.log(`   Available attributes: [${attributes.map(a => a.Name).join(', ')}]`);
       
       // Create attribute lookup map
       const attributeMap: { [key: string]: AFAttribute } = {};
@@ -485,7 +486,7 @@ export class PIAFService {
         attributeMap[attr.Name] = attr;
       });
 
-      // Extract values with fallbacks
+      // Extract core values with fallbacks
       const oilRate = this.getNumericValue(attributeMap[this.attributeMapping.oilRate]) ?? 
                      Math.floor(Math.random() * 80) + 20;
       const liquidRate = this.getNumericValue(attributeMap[this.attributeMapping.liquidRate]) ?? 
@@ -496,6 +497,76 @@ export class PIAFService {
                           Math.floor(Math.random() * 20) + 50;
       const planTarget = this.getNumericValue(attributeMap[this.attributeMapping.planTarget]) ?? 
                         oilRate + Math.floor(Math.random() * 40) - 20;
+      
+      // Extract extended attributes if available
+      const gasRate = this.attributeMapping.gasRate ? 
+        this.getNumericValue(attributeMap[this.attributeMapping.gasRate]) : undefined;
+      const tubingPressure = this.attributeMapping.tubingPressure ? 
+        this.getNumericValue(attributeMap[this.attributeMapping.tubingPressure]) : undefined;
+      const casingPressure = this.attributeMapping.casingPressure ? 
+        this.getNumericValue(attributeMap[this.attributeMapping.casingPressure]) : undefined;
+      const temperature = this.attributeMapping.temperature ? 
+        this.getNumericValue(attributeMap[this.attributeMapping.temperature]) : undefined;
+      const flowlinePressure = this.attributeMapping.flowlinePressure ? 
+        this.getNumericValue(attributeMap[this.attributeMapping.flowlinePressure]) : undefined;
+      const chokeSize = this.attributeMapping.chokeSize ? 
+        this.getNumericValue(attributeMap[this.attributeMapping.chokeSize]) : undefined;
+      const gasLiftRate = this.attributeMapping.gasLiftRate ? 
+        this.getNumericValue(attributeMap[this.attributeMapping.gasLiftRate]) : undefined;
+      const pumpSpeed = this.attributeMapping.pumpSpeed ? 
+        this.getNumericValue(attributeMap[this.attributeMapping.pumpSpeed]) : undefined;
+      const motorAmps = this.attributeMapping.motorAmps ? 
+        this.getNumericValue(attributeMap[this.attributeMapping.motorAmps]) : undefined;
+      const vibration = this.attributeMapping.vibration ? 
+        this.getNumericValue(attributeMap[this.attributeMapping.vibration]) : undefined;
+      const runtime = this.attributeMapping.runtime ? 
+        this.getNumericValue(attributeMap[this.attributeMapping.runtime]) : undefined;
+      const shutinTime = this.attributeMapping.shutinTime ? 
+        this.getNumericValue(attributeMap[this.attributeMapping.shutinTime]) : undefined;
+      const wellheadPressure = this.attributeMapping.wellheadPressure ? 
+        this.getNumericValue(attributeMap[this.attributeMapping.wellheadPressure]) : undefined;
+      const bottomholePressure = this.attributeMapping.bottomholePressure ? 
+        this.getNumericValue(attributeMap[this.attributeMapping.bottomholePressure]) : undefined;
+      const flowRate = this.attributeMapping.flowRate ? 
+        this.getNumericValue(attributeMap[this.attributeMapping.flowRate]) : undefined;
+
+      // Collect any custom attributes not in the standard mapping
+      const customAttributes: { [key: string]: number | string } = {};
+      const standardAttributes = new Set([
+        this.attributeMapping.oilRate,
+        this.attributeMapping.liquidRate,
+        this.attributeMapping.waterCut,
+        this.attributeMapping.espFrequency,
+        this.attributeMapping.planTarget,
+        this.attributeMapping.gasRate,
+        this.attributeMapping.tubingPressure,
+        this.attributeMapping.casingPressure,
+        this.attributeMapping.temperature,
+        this.attributeMapping.flowlinePressure,
+        this.attributeMapping.chokeSize,
+        this.attributeMapping.gasLiftRate,
+        this.attributeMapping.pumpSpeed,
+        this.attributeMapping.motorAmps,
+        this.attributeMapping.vibration,
+        this.attributeMapping.runtime,
+        this.attributeMapping.shutinTime,
+        this.attributeMapping.wellheadPressure,
+        this.attributeMapping.bottomholePressure,
+        this.attributeMapping.flowRate
+      ].filter(Boolean));
+
+      attributes.forEach(attr => {
+        if (!standardAttributes.has(attr.Name)) {
+          const value = this.getNumericValue(attr) ?? attr.Value?.Value;
+          if (value !== undefined && value !== null) {
+            customAttributes[attr.Name] = value;
+          }
+        }
+      });
+
+      if (Object.keys(customAttributes).length > 0) {
+        console.log(`   Custom attributes found: ${Object.keys(customAttributes).join(', ')}`);
+      }
       
       // Safe calculations
       const safePlanTarget = planTarget > 0 ? planTarget : oilRate;
@@ -517,7 +588,25 @@ export class PIAFService {
         planTarget,
         planDeviation,
         status,
-        lastUpdate: new Date()
+        lastUpdate: new Date(),
+        // Extended attributes (only include if they have values, convert null to undefined)
+        ...(gasRate !== undefined && gasRate !== null && { gasRate }),
+        ...(tubingPressure !== undefined && tubingPressure !== null && { tubingPressure }),
+        ...(casingPressure !== undefined && casingPressure !== null && { casingPressure }),
+        ...(temperature !== undefined && temperature !== null && { temperature }),
+        ...(flowlinePressure !== undefined && flowlinePressure !== null && { flowlinePressure }),
+        ...(chokeSize !== undefined && chokeSize !== null && { chokeSize }),
+        ...(gasLiftRate !== undefined && gasLiftRate !== null && { gasLiftRate }),
+        ...(pumpSpeed !== undefined && pumpSpeed !== null && { pumpSpeed }),
+        ...(motorAmps !== undefined && motorAmps !== null && { motorAmps }),
+        ...(vibration !== undefined && vibration !== null && { vibration }),
+        ...(runtime !== undefined && runtime !== null && { runtime }),
+        ...(shutinTime !== undefined && shutinTime !== null && { shutinTime }),
+        ...(wellheadPressure !== undefined && wellheadPressure !== null && { wellheadPressure }),
+        ...(bottomholePressure !== undefined && bottomholePressure !== null && { bottomholePressure }),
+        ...(flowRate !== undefined && flowRate !== null && { flowRate }),
+        // Include custom attributes if any were found
+        ...(Object.keys(customAttributes).length > 0 && { customAttributes })
       };
     } catch (error) {
       console.error(`❌ Error mapping attributes for ${element.Name}:`, error);

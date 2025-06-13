@@ -30,13 +30,31 @@ export interface WellData {
   name: string;
   wellPadName: string;
   oilRate: number;
-  liquidRate: number;      // Added liquid rate
+  liquidRate: number;
   waterCut: number;
   espFrequency: number;
-  planTarget: number;      // Added plan target
+  planTarget: number;
   planDeviation: number;
   status: 'good' | 'warning' | 'alert';
-  lastUpdate: Date;        // Changed from lastUpdated to lastUpdate
+  lastUpdate: Date;
+  // Additional dynamic attributes that may be available
+  gasRate?: number;
+  tubingPressure?: number;
+  casingPressure?: number;
+  temperature?: number;
+  flowlinePressure?: number;
+  chokeSize?: number;
+  gasLiftRate?: number;
+  pumpSpeed?: number;
+  motorAmps?: number;
+  vibration?: number;
+  runtime?: number;
+  shutinTime?: number;
+  wellheadPressure?: number;
+  bottomholePressure?: number;
+  flowRate?: number;
+  // Custom attributes map for additional PI attributes found
+  customAttributes?: { [key: string]: number | string };
 }
 
 export interface WellPadData {
@@ -61,11 +79,28 @@ export interface PIConnectionStatus {
 
 // Configuration for attribute mapping
 export interface AttributeMapping {
-  oilRate: string;        // PI Attribute name for oil rate
-  liquidRate: string;     // PI Attribute name for liquid rate
-  waterCut: string;       // PI Attribute name for water cut
-  espFrequency: string;   // PI Attribute name for ESP frequency
-  planTarget: string;     // PI Attribute name for plan target
+  // Core production attributes
+  oilRate: string;
+  liquidRate: string;
+  waterCut: string;
+  espFrequency: string;
+  planTarget: string;
+  // Extended attributes (optional)
+  gasRate?: string;
+  tubingPressure?: string;
+  casingPressure?: string;
+  temperature?: string;
+  flowlinePressure?: string;
+  chokeSize?: string;
+  gasLiftRate?: string;
+  pumpSpeed?: string;
+  motorAmps?: string;
+  vibration?: string;
+  runtime?: string;
+  shutinTime?: string;
+  wellheadPressure?: string;
+  bottomholePressure?: string;
+  flowRate?: string;
 }
 
 export const DEFAULT_ATTRIBUTE_MAPPING: AttributeMapping = {
@@ -73,5 +108,21 @@ export const DEFAULT_ATTRIBUTE_MAPPING: AttributeMapping = {
   liquidRate: 'Liquid_Rate',
   waterCut: 'Water_Cut',
   espFrequency: 'ESP_Frequency',
-  planTarget: 'Plan_Target'
+  planTarget: 'Plan_Target',
+  // Extended default mappings
+  gasRate: 'Gas_Rate',
+  tubingPressure: 'Tubing_Pressure',
+  casingPressure: 'Casing_Pressure',
+  temperature: 'Temperature',
+  flowlinePressure: 'Flowline_Pressure',
+  chokeSize: 'Choke_Size',
+  gasLiftRate: 'Gas_Lift_Rate',
+  pumpSpeed: 'Pump_Speed',
+  motorAmps: 'Motor_Amps',
+  vibration: 'Vibration',
+  runtime: 'Runtime',
+  shutinTime: 'Shutin_Time',
+  wellheadPressure: 'Wellhead_Pressure',
+  bottomholePressure: 'Bottomhole_Pressure',
+  flowRate: 'Flow_Rate'
 };
