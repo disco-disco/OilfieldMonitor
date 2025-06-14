@@ -4,13 +4,13 @@ import { useState } from 'react';
 import { Droplets, RefreshCw, Settings, Activity } from "lucide-react";
 
 // Simple working dashboard that avoids hydration issues
-export default function Home() {
-  const [wellPads, setWellPads] = useState<any[]>([]);
+export default function SimpleDashboard() {
+  const [wellPads, setWellPads] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [dataSource, setDataSource] = useState<string>('unknown');
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [currentMode, setCurrentMode] = useState<string>('development');
-  const [lastPIError, setLastPIError] = useState<string | null>(null);
+  const [dataSource, setDataSource] = useState('unknown');
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [currentMode, setCurrentMode] = useState('development');
+  const [lastPIError, setLastPIError] = useState(null);
 
   // Simple button click handler that definitely works
   const handleLoadData = async () => {
@@ -58,7 +58,7 @@ export default function Home() {
       
     } catch (error) {
       console.error('❌ Error in handleLoadData:', error);
-      setLastPIError(error instanceof Error ? error.message : String(error));
+      setLastPIError(error.message);
       setDataSource('simulated');
       
       // Fallback simulated data
@@ -72,13 +72,13 @@ export default function Home() {
   };
 
   // Load real wells from PI using the same proven logic as pi-explorer
-  const loadRealWellsFromPI = async (serverConfig: any, attributeMapping: any) => {
+  const loadRealWellsFromPI = async (serverConfig, attributeMapping) => {
     console.log('🔍 loadRealWellsFromPI: Starting...');
     
-    const getFetchOptions = (): RequestInit => ({
+    const getFetchOptions = () => ({
       method: 'GET',
       headers: { 'Accept': 'application/json' },
-      credentials: 'include' as RequestCredentials
+      credentials: 'include'
     });
     
     // Test PI Web API endpoints
@@ -125,13 +125,13 @@ export default function Home() {
       console.log('📋 Asset servers response:', serversData);
 
       // Find target server
-      const targetServer = serversData.Items?.find((server: any) => 
+      const targetServer = serversData.Items?.find(server => 
         server.Name.toLowerCase() === serverConfig.afServerName.toLowerCase()
       );
 
       if (!targetServer) {
         console.log(`❌ Target server not found: ${serverConfig.afServerName}`);
-        console.log('Available servers:', serversData.Items?.map((s: any) => s.Name));
+        console.log('Available servers:', serversData.Items?.map(s => s.Name));
         return null;
       }
 
@@ -146,13 +146,13 @@ export default function Home() {
       }
 
       const dbData = await dbResponse.json();
-      const targetDatabase = dbData.Items?.find((db: any) => 
+      const targetDatabase = dbData.Items?.find(db => 
         db.Name.toLowerCase() === serverConfig.afDatabaseName.toLowerCase()
       );
 
       if (!targetDatabase) {
         console.log(`❌ Target database not found: ${serverConfig.afDatabaseName}`);
-        console.log('Available databases:', dbData.Items?.map((db: any) => db.Name));
+        console.log('Available databases:', dbData.Items?.map(db => db.Name));
         return null;
       }
 
@@ -182,10 +182,10 @@ export default function Home() {
       }
 
       // Convert elements to wellpad format
-      const wellPads: any[] = [];
-      let currentPad: any = null;
+      const wellPads = [];
+      let currentPad = null;
 
-      elements.forEach((element: any, index: number) => {
+      elements.forEach((element, index) => {
         const well = {
           id: element.WebId || `well-${index}`,
           name: element.Name,
@@ -230,7 +230,7 @@ export default function Home() {
   };
 
   // Generate simulated wells
-  const generateSimulatedWells = (attributeMapping: any) => {
+  const generateSimulatedWells = (attributeMapping) => {
     console.log('🔧 Generating simulated wells...');
     
     const wells = [];
@@ -430,7 +430,7 @@ export default function Home() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {wellPad.wells.map((well: any) => (
+                  {wellPad.wells.map((well) => (
                     <div key={well.id} className="bg-slate-50 rounded-lg p-4 border">
                       <div className="flex justify-between items-center mb-2">
                         <h4 className="font-semibold text-slate-900">{well.name}</h4>
@@ -440,7 +440,7 @@ export default function Home() {
                         {Object.entries(well.attributes).map(([key, value]) => (
                           <div key={key} className="flex justify-between">
                             <span className="text-slate-600 truncate">{key}:</span>
-                            <span className="font-medium text-slate-900">{String(value)}</span>
+                            <span className="font-medium text-slate-900">{value}</span>
                           </div>
                         ))}
                       </div>
