@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Droplets, RefreshCw, Settings, Activity, Shield } from "lucide-react";
 import PISystemConfig from '@/components/PISystemConfig';
 import { ClientSidePIAFService } from '@/services/client-side-pi-af-service';
+import DynamicWellPadLayout from '@/components/DynamicWellPadLayout';
 
 // Simple working dashboard that avoids hydration issues
 export default function Home() {
@@ -174,17 +175,32 @@ export default function Home() {
     
     const wells = [];
     for (let i = 1; i <= 8; i++) {
+      const oilRate = Math.round(100 + Math.random() * 200);
+      const liquidRate = Math.round(150 + Math.random() * 250);
+      const waterCut = Math.round(20 + Math.random() * 40);
+      const gasRate = Math.round(300 + Math.random() * 400);
+      const tubingPressure = Math.round(100 + Math.random() * 200);
+      const casingPressure = Math.round(200 + Math.random() * 300);
+      
       wells.push({
         id: `sim-well-${i}`,
         name: `Well ${i}`,
         status: 'active',
+        oilRate,
+        liquidRate,
+        waterCut,
+        gasRate,
+        tubingPressure,
+        casingPressure,   
+        waterRate: Math.round(liquidRate * (waterCut / 100)),
+        espFrequency: Math.round(45 + Math.random() * 15),
         attributes: {
-          [attributeMapping.oilRate || 'Oil Production Rate']: Math.round(100 + Math.random() * 200),
-          [attributeMapping.liquidRate || 'Total Liquid Rate']: Math.round(150 + Math.random() * 250),
-          [attributeMapping.waterCut || 'Water Cut Percentage']: Math.round(20 + Math.random() * 40),
-          [attributeMapping.gasRate || 'Gas Production Rate']: Math.round(300 + Math.random() * 400),
-          [attributeMapping.tubingPressure || 'Tubing Head Pressure']: Math.round(100 + Math.random() * 200),
-          [attributeMapping.casingPressure || 'Casing Pressure']: Math.round(200 + Math.random() * 300),
+          [attributeMapping.oilRate || 'Oil Production Rate']: oilRate,
+          [attributeMapping.liquidRate || 'Total Liquid Rate']: liquidRate,
+          [attributeMapping.waterCut || 'Water Cut Percentage']: waterCut,
+          [attributeMapping.gasRate || 'Gas Production Rate']: gasRate,
+          [attributeMapping.tubingPressure || 'Tubing Head Pressure']: tubingPressure,
+          [attributeMapping.casingPressure || 'Casing Pressure']: casingPressure,
         },
         lastUpdated: new Date().toISOString()
       });
@@ -196,22 +212,32 @@ export default function Home() {
         name: 'North Ridge Pad',
         location: 'North Ridge Field',
         wells: wells.slice(0, 4),
-        totalOilRate: 0,
-        totalGasRate: 0,
-        totalWaterRate: 0,
-        averagePressure: 0,
-        lastUpdated: new Date().toISOString()
+        totalOilRate: wells.slice(0, 4).reduce((sum, w) => sum + w.oilRate, 0),
+        totalGasRate: wells.slice(0, 4).reduce((sum, w) => sum + w.gasRate, 0),
+        totalWaterRate: wells.slice(0, 4).reduce((sum, w) => sum + w.waterRate, 0),
+        averagePressure: wells.slice(0, 4).reduce((sum, w) => sum + w.tubingPressure, 0) / 4,
+        lastUpdated: new Date().toISOString(),
+        status: 'good',
+        totalWells: 4,
+        activeWells: 4,
+        avgOilRate: wells.slice(0, 4).reduce((sum, w) => sum + w.oilRate, 0) / 4,
+        avgWaterCut: wells.slice(0, 4).reduce((sum, w) => sum + w.waterCut, 0) / 4
       },
       {
         id: 'wellpad-2',
         name: 'Eagle Creek Pad',
         location: 'Eagle Creek Field',
         wells: wells.slice(4, 8),
-        totalOilRate: 0,
-        totalGasRate: 0,
-        totalWaterRate: 0,
-        averagePressure: 0,
-        lastUpdated: new Date().toISOString()
+        totalOilRate: wells.slice(4, 8).reduce((sum, w) => sum + w.oilRate, 0),
+        totalGasRate: wells.slice(4, 8).reduce((sum, w) => sum + w.gasRate, 0),
+        totalWaterRate: wells.slice(4, 8).reduce((sum, w) => sum + w.waterRate, 0),
+        averagePressure: wells.slice(4, 8).reduce((sum, w) => sum + w.tubingPressure, 0) / 4,
+        lastUpdated: new Date().toISOString(),
+        status: 'good',
+        totalWells: 4,
+        activeWells: 4,
+        avgOilRate: wells.slice(4, 8).reduce((sum, w) => sum + w.oilRate, 0) / 4,
+        avgWaterCut: wells.slice(4, 8).reduce((sum, w) => sum + w.waterCut, 0) / 4
       }
     ];
 
@@ -493,38 +519,12 @@ export default function Home() {
 
           {/* WellPads Display */}
           <div className="space-y-6">
-            {wellPads.map((wellPad) => (
-              <div key={wellPad.id} className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <div>
-                    <h3 className="text-xl font-bold text-slate-900">{wellPad.name}</h3>
-                    <p className="text-sm text-slate-500">{wellPad.location}</p>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm text-slate-500">Wells</div>
-                    <div className="text-2xl font-bold text-blue-600">{wellPad.wells.length}</div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {wellPad.wells.map((well: any) => (
-                    <div key={well.id} className="bg-slate-50 rounded-lg p-4 border">
-                      <div className="flex justify-between items-center mb-2">
-                        <h4 className="font-semibold text-slate-900">{well.name}</h4>
-                        <div className={`w-3 h-3 rounded-full ${well.status === 'active' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-                      </div>
-                      <div className="space-y-1 text-xs">
-                        {Object.entries(well.attributes).map(([key, value]) => (
-                          <div key={key} className="flex justify-between">
-                            <span className="text-slate-600 truncate">{key}:</span>
-                            <span className="font-medium text-slate-900">{String(value)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+            {wellPads.map((wellPad, index) => (
+              <DynamicWellPadLayout 
+                key={wellPad.id} 
+                wellPad={wellPad} 
+                index={index} 
+              />
             ))}
           </div>
         </div>
