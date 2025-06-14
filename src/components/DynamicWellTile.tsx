@@ -52,7 +52,7 @@ const ATTRIBUTE_CONFIG = {
     colorClass: 'text-yellow-600',
     format: (value: number) => value.toString()
   },
-  planDeviation: { 
+  planTarget: { // Changed from planDeviation to planTarget
     label: 'Plan Dev', 
     unit: '%', 
     icon: (value: number) => value >= 0 ? TrendingUp : TrendingDown, 
