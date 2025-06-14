@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Droplets, RefreshCw, Settings, Activity, Shield } from "lucide-react";
 import PISystemConfig from '@/components/PISystemConfig';
+import { ClientSidePIAFService } from '@/services/client-side-pi-af-service';
 
 // Simple working dashboard that avoids hydration issues
 export default function Home() {
@@ -32,24 +33,47 @@ export default function Home() {
       if (configResult.success && configResult.config.mode === 'production' && 
           configResult.config.piServerConfig?.piWebApiServerName) {
         
-        console.log('🔍 Production mode detected - attempting to load data from PI AF via API...');
+        console.log('🔍 Production mode detected - attempting client-side PI AF data loading...');
         
-        // Use the proper API endpoint that handles PI AF service integration
-        const apiResponse = await fetch('/api/pi-system/load-data');
-        const apiResult = await apiResponse.json();
-        
-        if (apiResult.success && apiResult.data && apiResult.data.length > 0) {
-          console.log('✅ SUCCESS: Real PI AF data loaded via API!');
-          setWellPads(apiResult.data);
-          setDataSource('pi-af');
-          setCurrentMode('production');
-          setLastUpdated(new Date());
-          return;
-        } else {
-          console.log('⚠️ API returned no data or error, falling back to simulated data');
-          console.log('API result:', apiResult);
-          setDataSource('simulated');
+        try {
+          // Try client-side PI AF service first (uses browser Windows Authentication)
+          const clientService = new ClientSidePIAFService(
+            configResult.config.piServerConfig,
+            configResult.config.attributeMapping
+          );
+          
+          const clientResult = await clientService.loadWellPadData();
+          
+          if (clientResult && clientResult.length > 0) {
+            console.log('✅ SUCCESS: Real PI AF data loaded via client-side service!');
+            setWellPads(clientResult);
+            setDataSource('pi-af');
+            setCurrentMode('production');
+            setLastUpdated(new Date());
+            return;
+          } else {
+            console.log('⚠️ Client-side service returned no data');
+          }
+          
+        } catch (clientError) {
+          console.log('⚠️ Client-side PI AF service failed:', clientError);
+          
+          // Set error for display (no server-side fallback as it can't handle Windows Auth)
+          const errorMessage = clientError instanceof Error ? clientError.message : String(clientError);
+          setLastPIError(`PI AF connection failed: ${errorMessage}`);
+          
+          // Log detailed error for debugging
+          console.log('🔍 Client-side service error details:', {
+            error: errorMessage,
+            config: {
+              server: configResult.config.piServerConfig.piWebApiServerName,
+              database: configResult.config.piServerConfig.afDatabaseName,
+              elementPath: configResult.config.piServerConfig.parentElementPath
+            }
+          });
         }
+        
+        setDataSource('simulated');
       } else {
         console.log('ℹ️ Not production mode, using simulated data');
         setDataSource('simulated');
@@ -84,32 +108,60 @@ export default function Home() {
     setAuthTestResult(null);
     
     try {
+      // First test server-side authentication
       const response = await fetch('/api/pi-system/test-windows-auth');
-      const result = await response.json();
+      const serverResult = await response.json();
       
-      console.log('🔐 Windows Auth Test Results:', result);
-      setAuthTestResult(result);
+      console.log('🔐 Server-side Windows Auth Test Results:', serverResult);
       
-      // Display results in browser console and alert
-      if (result.success) {
-        console.log('✅ Windows Authentication Test PASSED');
-        console.log(`📊 Summary: ${result.summary.workingEndpoints}/${result.summary.totalEndpointsTested} endpoints working`);
-        if (result.summary.bestEndpoint) {
-          console.log(`🎯 Best endpoint: ${result.summary.bestEndpoint}`);
+      // Then test client-side authentication
+      console.log('🌐 Testing client-side Windows Authentication...');
+      
+      const configResponse = await fetch('/api/pi-system/config');
+      const configResult = await configResponse.json();
+      
+      let clientResult = null;
+      if (configResult.success && configResult.config.piServerConfig?.piWebApiServerName) {
+        try {
+          const clientService = new ClientSidePIAFService(configResult.config.piServerConfig);
+          const clientTest = await clientService.testConnection();
+          
+          clientResult = {
+            success: clientTest.success,
+            message: clientTest.message,
+            details: clientTest.details
+          };
+          
+          console.log('🌐 Client-side test result:', clientResult);
+        } catch (error) {
+          clientResult = {
+            success: false,
+            message: `Client-side test failed: ${error instanceof Error ? error.message : String(error)}`,
+            details: null
+          };
         }
-      } else {
-        console.log('❌ Windows Authentication Test FAILED');
-        console.log('💡 Recommendations:', result.recommendations);
       }
       
-      // Show platform info
-      console.log('🖥️ Platform Info:', result.platformInfo);
+      // Combine results
+      const combinedResult = {
+        ...serverResult,
+        clientSide: clientResult,
+        overallSuccess: serverResult.success || (clientResult?.success || false),
+        recommendation: clientResult?.success ? 
+          '✅ Client-side Windows Authentication working! Use "Load Data" to get real PI AF data.' :
+          serverResult.success ? 
+            '✅ Server-side endpoints reachable. Try client-side authentication.' :
+            '❌ Both server-side and client-side authentication failed. Check configuration and network connectivity.'
+      };
+      
+      setAuthTestResult(combinedResult);
       
     } catch (error) {
       console.error('❌ Windows Auth test error:', error);
       setAuthTestResult({
         success: false,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
+        recommendation: '❌ Authentication test failed. Check configuration and try again.'
       });
     } finally {
       setIsLoading(false);
@@ -259,39 +311,71 @@ export default function Home() {
               Windows Authentication Test Results
             </h3>
             
-            {authTestResult.success ? (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            {authTestResult.overallSuccess ? (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-3 h-3 rounded-full bg-green-500"></div>
                   <span className="font-medium text-green-900">✅ Authentication Test PASSED</span>
                 </div>
-                <div className="text-sm text-green-700 space-y-1">
-                  <p>📊 Working Endpoints: {authTestResult.summary?.workingEndpoints}/{authTestResult.summary?.totalEndpointsTested}</p>
-                  <p>🔐 Auth Required: {authTestResult.summary?.authRequiredEndpoints} endpoints need Windows Authentication</p>
-                  {authTestResult.summary?.bestEndpoint && (
-                    <p>🎯 Best Endpoint: <code className="bg-green-100 px-1 rounded">{authTestResult.summary.bestEndpoint}</code></p>
-                  )}
-                </div>
+                
+                {authTestResult.clientSide?.success && (
+                  <div className="text-sm text-green-700 space-y-1 mb-3">
+                    <p className="font-medium">🌐 Client-side Authentication: ✅ WORKING</p>
+                    <p>{authTestResult.clientSide.message}</p>
+                    <p className="text-green-600 font-medium">
+                      💡 Your browser can authenticate with PI Web API! Click "Load Data" to get real data.
+                    </p>
+                  </div>
+                )}
+                
+                {authTestResult.summary && (
+                  <div className="text-sm text-green-700 space-y-1">
+                    <p>📊 Server-side: {authTestResult.summary.workingEndpoints}/{authTestResult.summary.totalEndpointsTested} endpoints working</p>
+                    <p>🔐 Auth Required: {authTestResult.summary.authRequiredEndpoints} endpoints need Windows Authentication</p>
+                    {authTestResult.summary.bestEndpoint && (
+                      <p>🎯 Best Endpoint: <code className="bg-green-100 px-1 rounded">{authTestResult.summary.bestEndpoint}</code></p>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                  <span className="font-medium text-red-900">❌ Authentication Test FAILED</span>
+                  <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                  <span className="font-medium text-amber-900">⚠️ Mixed Authentication Results</span>
                 </div>
-                <div className="text-sm text-red-700 space-y-1">
-                  {authTestResult.error && <p>Error: {authTestResult.error}</p>}
-                  {authTestResult.recommendations && (
-                    <div>
-                      <p className="font-medium mt-2">💡 Recommendations:</p>
-                      <ul className="list-disc list-inside space-y-1">
-                        {authTestResult.recommendations.slice(0, 5).map((rec: string, index: number) => (
-                          <li key={index}>{rec}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
+                
+                {authTestResult.clientSide && (
+                  <div className="text-sm text-amber-700 space-y-1 mb-3">
+                    <p className="font-medium">
+                      🌐 Client-side: {authTestResult.clientSide.success ? '✅ Working' : '❌ Failed'}
+                    </p>
+                    <p>{authTestResult.clientSide.message}</p>
+                  </div>
+                )}
+                
+                {authTestResult.error && (
+                  <div className="text-sm text-amber-700 space-y-1">
+                    <p>❌ Server-side Error: {authTestResult.error}</p>
+                  </div>
+                )}
+                
+                {authTestResult.recommendations && (
+                  <div className="text-sm text-amber-700 space-y-1">
+                    <p className="font-medium mt-2">💡 Recommendations:</p>
+                    <ul className="list-disc list-inside space-y-1">
+                      {authTestResult.recommendations.slice(0, 3).map((rec: string, index: number) => (
+                        <li key={index}>{rec}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {authTestResult.recommendation && (
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
+                <strong>Recommendation:</strong> {authTestResult.recommendation}
               </div>
             )}
             
@@ -352,8 +436,21 @@ export default function Home() {
                 </div>
               )}
               {lastPIError && (
-                <div className="text-xs text-red-600 bg-red-50 p-2 rounded mt-2">
-                  PI Error: {lastPIError}
+                <div className="text-sm text-red-700 bg-red-50 p-3 rounded-lg mt-2 border border-red-200">
+                  <div className="font-semibold mb-1">🚨 PI Connection Error</div>
+                  <div className="mb-2">{lastPIError}</div>
+                  {lastPIError.includes('Windows Authentication') || lastPIError.includes('401') ? (
+                    <div className="text-xs text-red-600 bg-red-100 p-2 rounded">
+                      <div className="font-medium">💡 Windows Authentication Required:</div>
+                      <div>This error means the PI Web API server is reachable but requires Windows Authentication.</div>
+                      <div>For testing, you can use the "Test Auth" button to verify connectivity.</div>
+                      <div>For full functionality, deploy this application to a Windows domain-joined machine.</div>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-red-600">
+                      Try using the "Test Auth" button to diagnose connection issues.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
