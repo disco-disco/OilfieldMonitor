@@ -401,6 +401,7 @@ export class ClientSidePIAFService {
     try {
       console.log(`🎯 Mapping attributes for: ${element.Name}`);
       console.log(`   Available attributes: [${attributes.map(a => a.Name).join(', ')}]`);
+      console.log(`   Attribute mapping config:`, this.attributeMapping);
       
       // Create attribute lookup map
       const attributeMap: { [key: string]: AFAttribute } = {};
@@ -408,40 +409,118 @@ export class ClientSidePIAFService {
         attributeMap[attr.Name] = attr;
       });
 
+      // Log detailed attribute lookup
+      console.log(`🔍 Looking for attributes:`, {
+        oilRateKey: this.attributeMapping.oilRate,
+        oilRateFound: !!attributeMap[this.attributeMapping.oilRate],
+        liquidRateKey: this.attributeMapping.liquidRate,
+        liquidRateFound: !!attributeMap[this.attributeMapping.liquidRate],
+        waterCutKey: this.attributeMapping.waterCut,
+        waterCutFound: !!attributeMap[this.attributeMapping.waterCut],
+        espFrequencyKey: this.attributeMapping.espFrequency,
+        espFrequencyFound: !!attributeMap[this.attributeMapping.espFrequency]
+      });
+
       // Extract core attributes using the attribute mapping
-      const oilRate = this.getNumericValue(attributeMap[this.attributeMapping.oilRate]) ?? 0;
-      const liquidRate = this.getNumericValue(attributeMap[this.attributeMapping.liquidRate]) ?? 0;
-      const waterCut = this.getNumericValue(attributeMap[this.attributeMapping.waterCut]) ?? 0;
-      const espFrequency = this.getNumericValue(attributeMap[this.attributeMapping.espFrequency]) ?? 0;
+      const oilRateAttr = attributeMap[this.attributeMapping.oilRate];
+      const liquidRateAttr = attributeMap[this.attributeMapping.liquidRate];
+      const waterCutAttr = attributeMap[this.attributeMapping.waterCut];
+      const espFrequencyAttr = attributeMap[this.attributeMapping.espFrequency];
+
+      console.log(`🔍 Attribute values:`, {
+        oilRate: oilRateAttr?.Value?.Value,
+        liquidRate: liquidRateAttr?.Value?.Value,
+        waterCut: waterCutAttr?.Value?.Value,
+        espFrequency: espFrequencyAttr?.Value?.Value
+      });
+
+      const oilRate = this.getNumericValue(oilRateAttr) ?? 0;
+      const liquidRate = this.getNumericValue(liquidRateAttr) ?? 0;
+      const waterCut = this.getNumericValue(waterCutAttr) ?? 0;
+      const espFrequency = this.getNumericValue(espFrequencyAttr) ?? 0;
+
+      console.log(`🔍 Final numeric values:`, {
+        oilRate,
+        liquidRate,
+        waterCut,
+        espFrequency
+      });
 
       // Extract extended attributes
-      const gasRate = this.attributeMapping.gasRate ?
+      let gasRate = this.attributeMapping.gasRate ?
         this.getNumericValue(attributeMap[this.attributeMapping.gasRate]) : undefined;
       const tubingPressure = this.attributeMapping.tubingPressure ?
         this.getNumericValue(attributeMap[this.attributeMapping.tubingPressure]) : undefined;
 
+      // Use actual values for individual properties, but try fallback for display
+      let displayOilRate = oilRate;
+      let displayLiquidRate = liquidRate;
+      let displayWaterCut = waterCut;
+      let displayGasRate = gasRate ?? 0;
+
+      // If all values are zero but we have attributes, try fallback approach
+      if (oilRate === 0 && liquidRate === 0 && waterCut === 0 && espFrequency === 0 && attributes.length > 0) {
+        console.log(`⚠️ All mapped values are zero but ${attributes.length} attributes exist - trying fallback strategy`);
+        
+        // Try to find any numeric attribute that could be production data
+        attributes.forEach(attr => {
+          const value = this.getNumericValue(attr);
+          if (value !== null && value > 0) {
+            const attrNameLower = attr.Name.toLowerCase();
+            
+            // Look for oil-related attributes
+            if (attrNameLower.includes('oil') && (attrNameLower.includes('rate') || attrNameLower.includes('production'))) {
+              displayOilRate = value;
+              console.log(`🔍 Found oil rate fallback: ${attr.Name} = ${value}`);
+            }
+            // Look for liquid-related attributes  
+            else if (attrNameLower.includes('liquid') && (attrNameLower.includes('rate') || attrNameLower.includes('total'))) {
+              displayLiquidRate = value;
+              console.log(`🔍 Found liquid rate fallback: ${attr.Name} = ${value}`);
+            }
+            // Look for water cut
+            else if (attrNameLower.includes('water') && (attrNameLower.includes('cut') || attrNameLower.includes('percent'))) {
+              displayWaterCut = value;
+              console.log(`🔍 Found water cut fallback: ${attr.Name} = ${value}`);
+            }
+            // Look for gas production
+            else if (attrNameLower.includes('gas') && (attrNameLower.includes('rate') || attrNameLower.includes('production'))) {
+              displayGasRate = value;
+              console.log(`🔍 Found gas rate fallback: ${attr.Name} = ${value}`);
+            }
+          }
+        });
+        
+        console.log(`🔄 Updated values after fallback:`, {
+          displayOilRate,
+          displayLiquidRate,
+          displayWaterCut,
+          displayGasRate
+        });
+      }
+
       // Build the attributes object with custom display names for the tile component
       const displayAttributes: { [key: string]: number | string } = {};
       
-      // Add core attributes using custom names from mapping
-      if (this.attributeMapping.oilRate && oilRate !== null) {
-        displayAttributes[this.attributeMapping.oilRate] = oilRate;
+      // Use display values (either original or fallback) for the attributes object
+      if (this.attributeMapping.oilRate && displayOilRate > 0) {
+        displayAttributes[this.attributeMapping.oilRate] = displayOilRate;
       }
-      if (this.attributeMapping.liquidRate && liquidRate !== null) {
-        displayAttributes[this.attributeMapping.liquidRate] = liquidRate;
+      if (this.attributeMapping.liquidRate && displayLiquidRate > 0) {
+        displayAttributes[this.attributeMapping.liquidRate] = displayLiquidRate;
       }
-      if (this.attributeMapping.waterCut && waterCut !== null) {
-        displayAttributes[this.attributeMapping.waterCut] = waterCut;
+      if (this.attributeMapping.waterCut && displayWaterCut > 0) {
+        displayAttributes[this.attributeMapping.waterCut] = displayWaterCut;
       }
-      if (this.attributeMapping.espFrequency && espFrequency !== null) {
+      if (this.attributeMapping.espFrequency && espFrequency > 0) {
         displayAttributes[this.attributeMapping.espFrequency] = espFrequency;
       }
       
       // Add extended attributes using custom names
-      if (this.attributeMapping.gasRate && gasRate !== undefined && gasRate !== null) {
-        displayAttributes[this.attributeMapping.gasRate] = gasRate;
+      if (this.attributeMapping.gasRate && displayGasRate > 0) {
+        displayAttributes[this.attributeMapping.gasRate] = displayGasRate;
       }
-      if (this.attributeMapping.tubingPressure && tubingPressure !== undefined && tubingPressure !== null) {
+      if (this.attributeMapping.tubingPressure && tubingPressure !== undefined && tubingPressure !== null && tubingPressure > 0) {
         displayAttributes[this.attributeMapping.tubingPressure] = tubingPressure;
       }
       
@@ -458,26 +537,28 @@ export class ClientSidePIAFService {
       attributes.forEach(attr => {
         if (!standardAttributeNames.has(attr.Name)) {
           const value = this.getNumericValue(attr);
-          if (value !== null) {
+          if (value !== null && value !== 0) {
             displayAttributes[attr.Name] = value;
+            console.log(`📊 Added additional attribute: ${attr.Name} = ${value}`);
           }
         }
       });
 
       console.log(`✅ Successfully mapped ${Object.keys(displayAttributes).length} attributes for "${element.Name}"`);
-      console.log(`   Attributes: ${Object.keys(displayAttributes).join(', ')}`);
+      console.log(`   Final display attributes:`, displayAttributes);
+      console.log(`   Using values: Oil=${displayOilRate}, Liquid=${displayLiquidRate}, Water=${displayWaterCut}%, Gas=${displayGasRate}`);
 
       return {
         id: element.WebId || `well-${element.Name}`,
         name: element.Name,
-        status: oilRate > 0 ? 'active' : 'inactive',
+        status: displayOilRate > 0 ? 'active' : 'inactive',
         lastUpdated: new Date().toISOString(),
         attributes: displayAttributes,
-        oilRate,
-        gasRate: gasRate ?? 0,
-        waterCut,
-        waterRate: liquidRate * (waterCut / 100),
-        liquidRate,
+        oilRate: displayOilRate,
+        gasRate: displayGasRate,
+        waterCut: displayWaterCut,
+        waterRate: displayLiquidRate * (displayWaterCut / 100),
+        liquidRate: displayLiquidRate,
         espFrequency,
         ...(tubingPressure !== undefined && tubingPressure !== null && { tubingPressure })
       };
