@@ -32,7 +32,10 @@ export class ConfigManager {
         return {
           mode: parsedConfig.mode || 'development',
           piServerConfig: parsedConfig.piServerConfig,
-          attributeMapping: { ...DEFAULT_ATTRIBUTE_MAPPING, ...parsedConfig.attributeMapping },
+          // If pi-config.json has attributeMapping and it's not empty, use it exclusively. Otherwise, use DEFAULT_ATTRIBUTE_MAPPING.
+          attributeMapping: (parsedConfig.attributeMapping && Object.keys(parsedConfig.attributeMapping).length > 0) 
+                            ? parsedConfig.attributeMapping 
+                            : DEFAULT_ATTRIBUTE_MAPPING,
           lastUpdated: parsedConfig.lastUpdated || new Date().toISOString()
         };
       }
