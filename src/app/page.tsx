@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Droplets, RefreshCw, Settings, Activity } from "lucide-react";
+import PISystemConfig from '@/components/PISystemConfig';
 
 // Simple working dashboard that avoids hydration issues
 export default function Home() {
@@ -11,6 +12,8 @@ export default function Home() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [currentMode, setCurrentMode] = useState<string>('development');
   const [lastPIError, setLastPIError] = useState<string | null>(null);
+  const [showConfig, setShowConfig] = useState(false);
+  const [isPIConfigured, setIsPIConfigured] = useState(false);
 
   // Simple button click handler that definitely works
   const handleLoadData = async () => {
@@ -28,20 +31,22 @@ export default function Home() {
       if (configResult.success && configResult.config.mode === 'production' && 
           configResult.config.piServerConfig?.piWebApiServerName) {
         
-        console.log('🔍 Production mode detected - attempting direct PI AF data loading...');
+        console.log('🔍 Production mode detected - attempting to load data from PI AF via API...');
         
-        // Use same logic as pi-explorer to load real wells
-        const realData = await loadRealWellsFromPI(configResult.config.piServerConfig, configResult.config.attributeMapping);
+        // Use the proper API endpoint that handles PI AF service integration
+        const apiResponse = await fetch('/api/pi-system/load-data');
+        const apiResult = await apiResponse.json();
         
-        if (realData && realData.length > 0) {
-          console.log('✅ SUCCESS: Real PI AF data loaded!');
-          setWellPads(realData);
+        if (apiResult.success && apiResult.data && apiResult.data.length > 0) {
+          console.log('✅ SUCCESS: Real PI AF data loaded via API!');
+          setWellPads(apiResult.data);
           setDataSource('pi-af');
           setCurrentMode('production');
           setLastUpdated(new Date());
           return;
         } else {
-          console.log('⚠️ No wells found, falling back to simulated data');
+          console.log('⚠️ API returned no data or error, falling back to simulated data');
+          console.log('API result:', apiResult);
           setDataSource('simulated');
         }
       } else {
@@ -68,164 +73,6 @@ export default function Home() {
       setLastUpdated(new Date());
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  // Load real wells from PI using the same proven logic as pi-explorer
-  const loadRealWellsFromPI = async (serverConfig: any, attributeMapping: any) => {
-    console.log('🔍 loadRealWellsFromPI: Starting...');
-    
-    const getFetchOptions = (): RequestInit => ({
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      credentials: 'include' as RequestCredentials
-    });
-    
-    // Test PI Web API endpoints
-    const testEndpoints = [
-      `https://${serverConfig.piWebApiServerName}/piwebapi`,
-      `https://${serverConfig.piWebApiServerName}:443/piwebapi`,
-      `http://${serverConfig.piWebApiServerName}/piwebapi`
-    ];
-
-    let workingEndpoint = null;
-
-    for (const endpoint of testEndpoints) {
-      try {
-        console.log(`🧪 Testing ${endpoint}`);
-        const response = await fetch(endpoint, getFetchOptions());
-        console.log(`   Status: ${response.status}`);
-
-        if (response.ok || response.status === 401) {
-          workingEndpoint = endpoint;
-          console.log(`✅ Working endpoint: ${endpoint}`);
-          break;
-        }
-      } catch (error) {
-        console.log(`❌ Failed: ${endpoint} - ${error}`);
-        continue;
-      }
-    }
-
-    if (!workingEndpoint) {
-      console.log('❌ No working PI Web API endpoint found');
-      return null;
-    }
-
-    // Load asset servers and databases (same as pi-explorer)
-    console.log('🔍 Loading asset servers...');
-    try {
-      const serversResponse = await fetch(`${workingEndpoint}/assetservers`, getFetchOptions());
-      if (!serversResponse.ok) {
-        console.log(`❌ Failed to load asset servers: ${serversResponse.status}`);
-        return null;
-      }
-
-      const serversData = await serversResponse.json();
-      console.log('📋 Asset servers response:', serversData);
-
-      // Find target server
-      const targetServer = serversData.Items?.find((server: any) => 
-        server.Name.toLowerCase() === serverConfig.afServerName.toLowerCase()
-      );
-
-      if (!targetServer) {
-        console.log(`❌ Target server not found: ${serverConfig.afServerName}`);
-        console.log('Available servers:', serversData.Items?.map((s: any) => s.Name));
-        return null;
-      }
-
-      console.log(`✅ Found target server: ${targetServer.Name}`);
-
-      // Load databases
-      console.log('🔍 Loading databases...');
-      const dbResponse = await fetch(targetServer.Links.Databases, getFetchOptions());
-      if (!dbResponse.ok) {
-        console.log(`❌ Failed to load databases: ${dbResponse.status}`);
-        return null;
-      }
-
-      const dbData = await dbResponse.json();
-      const targetDatabase = dbData.Items?.find((db: any) => 
-        db.Name.toLowerCase() === serverConfig.afDatabaseName.toLowerCase()
-      );
-
-      if (!targetDatabase) {
-        console.log(`❌ Target database not found: ${serverConfig.afDatabaseName}`);
-        console.log('Available databases:', dbData.Items?.map((db: any) => db.Name));
-        return null;
-      }
-
-      console.log(`✅ Found target database: ${targetDatabase.Name}`);
-
-      // Load elements (wells)
-      if (!targetDatabase.Links?.Elements) {
-        console.log('❌ No elements link found in database');
-        return null;
-      }
-
-      console.log('🔍 Loading elements...');
-      const elementsResponse = await fetch(targetDatabase.Links.Elements, getFetchOptions());
-      if (!elementsResponse.ok) {
-        console.log(`❌ Failed to load elements: ${elementsResponse.status}`);
-        return null;
-      }
-
-      const elementsData = await elementsResponse.json();
-      const elements = elementsData.Items || [];
-
-      console.log(`🎉 SUCCESS: Loaded ${elements.length} elements from AF database!`);
-
-      if (elements.length === 0) {
-        console.log('⚠️ No elements found in database');
-        return null;
-      }
-
-      // Convert elements to wellpad format
-      const wellPads: any[] = [];
-      let currentPad: any = null;
-
-      elements.forEach((element: any, index: number) => {
-        const well = {
-          id: element.WebId || `well-${index}`,
-          name: element.Name,
-          status: 'active',
-          attributes: {
-            [attributeMapping?.oilRate || 'Oil Production Rate']: Math.round(100 + Math.random() * 200),
-            [attributeMapping?.liquidRate || 'Total Liquid Rate']: Math.round(150 + Math.random() * 250),
-            [attributeMapping?.waterCut || 'Water Cut Percentage']: Math.round(20 + Math.random() * 40),
-            [attributeMapping?.gasRate || 'Gas Production Rate']: Math.round(300 + Math.random() * 400),
-            [attributeMapping?.tubingPressure || 'Tubing Head Pressure']: Math.round(100 + Math.random() * 200),
-            [attributeMapping?.casingPressure || 'Casing Pressure']: Math.round(200 + Math.random() * 300),
-          },
-          lastUpdated: new Date().toISOString()
-        };
-
-        // Group wells into pads (4 wells per pad)
-        if (!currentPad || currentPad.wells.length >= 4) {
-          currentPad = {
-            id: `pi-wellpad-${wellPads.length + 1}`,
-            name: `PI Wellpad ${wellPads.length + 1}`,
-            location: `${serverConfig.afServerName}\\${serverConfig.afDatabaseName}`,
-            wells: [],
-            totalOilRate: 0,
-            totalGasRate: 0,
-            totalWaterRate: 0,
-            averagePressure: 0,
-            lastUpdated: new Date().toISOString()
-          };
-          wellPads.push(currentPad);
-        }
-
-        currentPad.wells.push(well);
-      });
-
-      console.log(`🎉 Created ${wellPads.length} wellpads from ${elements.length} real elements!`);
-      return wellPads;
-
-    } catch (error) {
-      console.error('❌ Error loading wells from PI:', error);
-      return null;
     }
   };
 
@@ -320,6 +167,14 @@ export default function Home() {
               </a>
               
               <button
+                onClick={() => setShowConfig(!showConfig)}
+                className="flex items-center gap-2 px-3 py-1 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                <Settings className="w-4 h-4" />
+                {showConfig ? 'Hide Settings' : 'Settings'}
+              </button>
+              
+              <button
                 onClick={handleLoadData}
                 disabled={isLoading}
                 className="flex items-center gap-2 px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
@@ -331,6 +186,20 @@ export default function Home() {
           </div>
         </div>
       </header>
+
+      {/* Settings Panel */}
+      {showConfig && (
+        <div className="bg-white border-b border-slate-200 shadow-sm">
+          <div className="container mx-auto px-6 py-6">
+            <PISystemConfig 
+              onConfigured={() => {
+                setIsPIConfigured(true);
+                setShowConfig(false);
+              }} 
+            />
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
