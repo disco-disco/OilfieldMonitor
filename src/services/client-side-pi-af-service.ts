@@ -399,59 +399,52 @@ export class ClientSidePIAFService {
   // Map attributes to well data
   private mapAttributesToWellData(element: AFElement, attributes: AFAttribute[]): WellData | null {
     try {
-      console.log(`[STRICT MAPPING] Mapping attributes for: "${element.Name}". Using ONLY attributes from settings.`);
-      // console.log(`   Available attributes on element (${attributes.length}): [${attributes.map(a => a.Name).join(', ')}]`);
-      // console.log(`   Attribute mapping config from settings:`, this.attributeMapping);
-
-      const attributeMap: { [key: string]: AFAttribute } = {};
+      console.log(`[STRICT MAPPING V2] For well: "${element.Name}"`);
+      console.log(`   Using attributeMapping from settings (pi-config.json):`, JSON.parse(JSON.stringify(this.attributeMapping)));
+      
+      const allElementAttributesMap: { [key: string]: AFAttribute } = {};
       attributes.forEach(attr => {
-        attributeMap[attr.Name] = attr;
+        allElementAttributesMap[attr.Name] = attr;
+        // console.log(`     Raw Attr from Element: "${attr.Name}", Value:`, attr.Value);
       });
+      // console.log(`   All attributes found on PI Element "${element.Name}":`, Object.keys(allElementAttributesMap));
 
       const wellDataDirectProps: { [key: string]: number } = {};
-      const wellTileAttributes: { [key: string]: number | string } = {};
+      const wellTileAttributes: { [key: string]: number | string } = {}; // This will become well.attributes
 
-      // Define standard keys expected as direct properties on WellData object
-      // These keys correspond to the keys in `this.attributeMapping`
-      const standardWellDataKeys = [
-        'oilRate', 'liquidRate', 'waterCut', 'gasRate', 
-        'espFrequency', 'tubingPressure', 'casingPressure', 
-        // Add other specific keys from AttributeMapping that should be direct WellData properties
-      ];
-      
-      // Initialize direct properties to 0
-      standardWellDataKeys.forEach(key => {
-        wellDataDirectProps[key] = 0;
-      });
-
-      // Iterate over the attributeMapping (from pi-config.json)
-      for (const configKey in this.attributeMapping) { // e.g., configKey = "oilRate"
-        const afAttributeName = this.attributeMapping[configKey as keyof AttributeMapping]; // e.g., afAttributeName = "Oil Production Rate"
+      // Iterate ONLY over the attributeMapping from settings
+      for (const settingsKey in this.attributeMapping) { // e.g., settingsKey = "oilRate"
+        const piAfAttributeName = this.attributeMapping[settingsKey as keyof AttributeMapping]; // e.g., piAfAttributeName = "Oil Production Rate"
         
-        if (afAttributeName) {
-          const attributeFromElement = attributeMap[afAttributeName];
-          const numericValue = this.getNumericValue(attributeFromElement); // Returns number or null
-
-          // Populate wellDataDirectProps (e.g., wellDataDirectProps.oilRate)
-          // These are used for calculations and direct access on the WellData object.
-          if (standardWellDataKeys.includes(configKey)) {
-             wellDataDirectProps[configKey] = numericValue ?? 0;
+        if (piAfAttributeName) {
+          console.log(`   Processing settingsKey "${settingsKey}" -> piAfAttributeName "${piAfAttributeName}"`);
+          const attributeFromElement = allElementAttributesMap[piAfAttributeName];
+          
+          if (attributeFromElement) {
+            // console.log(`     Found PI Attr "${piAfAttributeName}". Raw Value Object:`, attributeFromElement.Value);
+          } else {
+            console.log(`     PI Attr "${piAfAttributeName}" NOT FOUND on element "${element.Name}".`);
           }
+          
+          const numericValue = this.getNumericValue(attributeFromElement, piAfAttributeName); // Pass name for better logging
 
-          // Populate wellTileAttributes (this goes into well.attributes for the tile)
-          // The key here MUST be the afAttributeName, as this is what the tile expects.
-          // This ensures the tile displays the attribute with its name from PI AF / config.
-          // All configured attributes will be added to wellTileAttributes, defaulting to 0 if not found or null.
-          wellTileAttributes[afAttributeName] = numericValue ?? 0; 
+          // Populate direct properties (oilRate, gasRate etc.) on WellData object
+          // These are keyed by settingsKey (e.g., "oilRate")
+          wellDataDirectProps[settingsKey] = numericValue ?? 0;
+
+          // Populate the attributes object for the tile.
+          // This object is keyed by settingsKey (e.g., "oilRate")
+          // This allows DynamicWellTile to use its ATTRIBUTE_CONFIG directly.
+          wellTileAttributes[settingsKey] = numericValue ?? 0;
+          console.log(`     Mapped to wellTileAttributes["${settingsKey}"] = ${numericValue ?? 0}`);
+        } else {
+          console.log(`   Skipping settingsKey "${settingsKey}" as it has no piAfAttributeName defined in mapping.`);
         }
       }
       
-      // console.log(`   WellData direct properties extracted:`, wellDataDirectProps);
-      console.log(`   Attributes for tile (well.attributes) for "${element.Name}":`, wellTileAttributes);
-
+      console.log(`   Final wellTileAttributes for "${element.Name}" (becomes well.attributes):`, JSON.parse(JSON.stringify(wellTileAttributes)));
       if (Object.keys(wellTileAttributes).length === 0 && Object.keys(this.attributeMapping).length > 0) {
-        console.warn(`⚠️ WARNING: For well "${element.Name}", no attributes were populated for the tile based on current settings, despite configuration existing.`);
-        console.warn(`   This means either configured PI AF attribute names were not found on the element, or their values were not parseable.`);
+        console.warn(`⚠️ WARNING: For well "${element.Name}", well.attributes is EMPTY but attributeMapping has ${Object.keys(this.attributeMapping).length} entries. Check PI AF attribute names and connectivity.`);
       }
     
       const oilRateForStatus = wellDataDirectProps['oilRate'] ?? 0;
@@ -463,72 +456,79 @@ export class ClientSidePIAFService {
         name: element.Name,
         status: oilRateForStatus > 0 ? 'active' : 'inactive',
         lastUpdated: new Date().toISOString(),
-        
-        attributes: wellTileAttributes, // Used by DynamicWellTile, keyed by actual AF attribute names
-        
-        // Direct properties on WellData object, populated from configured mappings
+        attributes: wellTileAttributes, // Strictly from attributeMapping
         oilRate: oilRateForStatus,
         gasRate: wellDataDirectProps['gasRate'] ?? 0,
         waterCut: waterCutForCalc,
         liquidRate: liquidRateForCalc,
-        waterRate: liquidRateForCalc * (waterCutForCalc / 100), // Calculated
+        waterRate: liquidRateForCalc * (waterCutForCalc / 100),
         espFrequency: wellDataDirectProps['espFrequency'] ?? 0,
         tubingPressure: wellDataDirectProps['tubingPressure'] ?? 0,
         casingPressure: wellDataDirectProps['casingPressure'] ?? 0,
-        // Ensure any other direct properties defined in WellData type and needed for calcs are populated
       };
 
     } catch (error) {
       const err = error as Error;
-      console.error(`❌ Error in strict mapAttributesToWellData for "${element.Name}": ${err.message}`, err.stack);
+      console.error(`❌ Error in strict mapAttributesToWellData V2 for "${element.Name}": ${err.message}`, err.stack);
       return null;
     }
   }
 
-  // Safe numeric value extraction - ensure it handles various PI data states
-  private getNumericValue(attribute: AFAttribute | undefined): number | null {
-    if (!attribute || typeof attribute.Value === 'undefined' || attribute.Value === null) {
+  // Safe numeric value extraction
+  private getNumericValue(attribute: AFAttribute | undefined, attributeNameForLog: string): number | null {
+    // console.log(`[getNumericValue] For PI Attribute: "${attributeNameForLog}"`);
+    if (!attribute) {
+      // console.log(`   Attribute not provided or undefined.`);
+      return null;
+    }
+    if (typeof attribute.Value === 'undefined' || attribute.Value === null) {
+      console.log(`   Attribute "${attributeNameForLog}" has undefined or null Value object.`);
       return null;
     }
   
     const valueContainer = attribute.Value;
     const actualValue = valueContainer.Value; // This is the actual data point value
   
-    // Check for PI Point error states, where Value itself might be an object
+    // console.log(`   Raw Value from PI for "${attributeNameForLog}":`, JSON.parse(JSON.stringify(valueContainer)));
+    // console.log(`   Actual data point value (actualValue):`, actualValue, `(Type: ${typeof actualValue})`);
+
     if (typeof actualValue === 'object' && actualValue !== null) {
-      // Example: { Name: "Pt Created", Value: null, IsSystem: true, ... }
-      // Or { Name: "Calc Failed", Value: null, IsSystem: true, ... }
-      // If 'actualValue.Value' (nested) exists and is numeric/string, try to parse it
       const nestedValue = (actualValue as any).Value;
+      const nestedName = (actualValue as any).Name;
+      console.log(`   Attribute "${attributeNameForLog}" has complex object value (Name: ${nestedName}). Attempting to find nested Value.`);
       if (typeof nestedValue === 'number') {
+        console.log(`     Found nested numeric value: ${nestedValue}`);
         return isNaN(nestedValue) ? null : nestedValue;
       }
       if (typeof nestedValue === 'string') {
         const parsedNested = parseFloat(nestedValue);
+        console.log(`     Found nested string value "${nestedValue}", parsed to: ${parsedNested}`);
         return isNaN(parsedNested) ? null : parsedNested;
       }
-      // If the object indicates an error and has no usable numeric value
-      console.warn(`Attribute "${attribute.Name}" has complex object value, possibly error state:`, actualValue);
+      console.warn(`     Complex object for "${attributeNameForLog}" does not contain a usable nested numeric Value. Name: ${nestedName}, Value: ${nestedValue}`);
       return null; 
     }
   
     if (typeof actualValue === 'number') {
+      // console.log(`   Value for "${attributeNameForLog}" is number: ${actualValue}.`);
       return isNaN(actualValue) ? null : actualValue;
     }
     
     if (typeof actualValue === 'string') {
-      // Attempt to parse, but be wary of non-numeric strings
-      if (actualValue.trim() === '') return null; // Empty string is not a number
+      if (actualValue.trim() === '') {
+        console.log(`   Value for "${attributeNameForLog}" is empty string.`);
+        return null;
+      }
       const parsed = parseFloat(actualValue);
-      // Check if parsing resulted in NaN, or if the string might represent a digital state
+      // console.log(`   Value for "${attributeNameForLog}" is string: "${actualValue}", parsed to: ${parsed}.`);
       if (isNaN(parsed)) {
-         // console.log(`Attribute "${attribute.Name}" string value "${actualValue}" is not a number.`);
-         return null; // Or handle digital states if necessary
+         console.log(`     String value "${actualValue}" for "${attributeNameForLog}" is not a number (NaN).`);
+         return null;
       }
       return parsed;
     }
     
-    // console.log(`Attribute "${attribute.Name}" value type ${typeof actualValue} not handled for numeric conversion.`);
+    console.log(`   Value for "${attributeNameForLog}" (type ${typeof actualValue}, value ${actualValue}) is not handled for numeric conversion.`);
     return null;
   }
 

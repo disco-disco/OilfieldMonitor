@@ -183,34 +183,46 @@ const ATTRIBUTE_CONFIG = {
 };
 
 export default function DynamicWellTile({ well, availableAttributes, compact = false }: DynamicWellTileProps) {
-  // Get all available attributes from the well data
+  // Get all available attributes from the well data, configured by ATTRIBUTE_CONFIG
   const getAvailableAttributes = () => {
     const attributes: Array<{ key: string; value: number; config: any }> = [];
     
-    // Use the new attributes structure
-    if (well.attributes) {
-      Object.entries(well.attributes).forEach(([attributeName, value]) => {
-        if (typeof value === 'number') { // Accept all numeric values, including zero
+    if (well.attributes) { // Expects well.attributes to be { oilRate: value, waterCut: value, ... }
+      Object.entries(well.attributes).forEach(([settingsKey, value]) => {
+        // settingsKey is "oilRate", "waterCut", etc.
+        // value is the numeric value
+        const configEntry = ATTRIBUTE_CONFIG[settingsKey as keyof typeof ATTRIBUTE_CONFIG];
+
+        if (typeof value === 'number' && configEntry) {
+          // Resolve icon if it's a function
+          const resolvedIcon = typeof configEntry.icon === 'function' 
+                               ? configEntry.icon(value) 
+                               : configEntry.icon;
+          
+          // Resolve colorClass if it's a function
+          const resolvedColorClass = typeof configEntry.colorClass === 'function'
+                                     ? configEntry.colorClass(value)
+                                     : configEntry.colorClass;
+
           attributes.push({
-            key: attributeName,
+            key: settingsKey, // Use settingsKey as the key
             value,
-            config: {
-              label: attributeName.replace(/_/g, ' '),
-              unit: getUnitForAttribute(attributeName),
-              icon: getIconForAttribute(attributeName),
-              priority: attributes.length + 1,
-              colorClass: 'text-slate-600',
-              format: (v: number) => v.toLocaleString()
+            config: { // Use the predefined config from ATTRIBUTE_CONFIG
+              ...configEntry,
+              icon: resolvedIcon,
+              colorClass: resolvedColorClass,
             }
           });
         }
       });
     }
     
+    // Sort by priority defined in ATTRIBUTE_CONFIG
+    attributes.sort((a, b) => (a.config.priority || 99) - (b.config.priority || 99));
     return attributes;
   };
 
-  // Helper function to get appropriate unit for attribute
+  // Helper function to get appropriate unit for attribute (fallback, ideally from ATTRIBUTE_CONFIG)
   const getUnitForAttribute = (attributeName: string): string => {
     const lowerName = attributeName.toLowerCase();
     if (lowerName.includes('rate') && lowerName.includes('oil')) return 'bbl/day';
@@ -228,7 +240,7 @@ export default function DynamicWellTile({ well, availableAttributes, compact = f
     return '';
   };
 
-  // Helper function to get appropriate icon for attribute
+  // Helper function to get appropriate icon for attribute (fallback, ideally from ATTRIBUTE_CONFIG)
   const getIconForAttribute = (attributeName: string) => {
     const lowerName = attributeName.toLowerCase();
     if (lowerName.includes('oil') || lowerName.includes('liquid') || lowerName.includes('flow')) return Droplets;
