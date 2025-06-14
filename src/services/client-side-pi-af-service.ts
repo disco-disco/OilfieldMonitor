@@ -27,16 +27,52 @@ interface AFElement {
   };
 }
 
+// Represents the structure of an attribute's value container, 
+// typically received from a .../value or .../streams/.../value endpoint
+interface AFValueContainer {
+  Value?: any;
+  Timestamp?: string;
+  UnitsAbbreviation?: string;
+  Good?: boolean;
+  Questionable?: boolean;
+  Substituted?: boolean;
+  Annotated?: boolean;
+  Errors?: any[]; 
+}
+
 interface AFAttribute {
   Name: string;
   Path: string;
   Type?: string;
-  Value?: {
-    Value?: any;
-    Timestamp?: string;
-  };
+  // Value property might be populated by selectedFields (though not reliably for actual data)
+  // or it can be populated after fetching from Links.Value
+  Value?: AFValueContainer; 
   WebId?: string;
+  Links?: {
+    Self?: string;
+    Value?: string; // URL to fetch the actual current value
+    Element?: string;
+    // other standard links like InterpolatedData, RecordedData, Point etc.
+    [key: string]: any; 
+  };
+  // Other properties that might be returned by selectedFields
+  DefaultUnitsName?: string;
+  DefaultUnitsNameAbbreviation?: string;
+  DisplayDigits?: number;
+  DataReferencePlugIn?: string;
+  ConfigString?: string;
+  IsConfigurationItem?: boolean;
+  IsExcluded?: boolean;
+  IsHidden?: boolean;
+  IsManualDataEntry?: boolean;
+  HasChildren?: boolean;
+  CategoryNames?: string[];
+  Step?: boolean;
+  TraitName?: string;
+  Span?: number;
+  Zero?: number;
 }
+
 
 export class ClientSidePIAFService {
   private config: PIServerConfig;
@@ -391,7 +427,8 @@ export class ClientSidePIAFService {
             
             try {
               const attributes = await this.loadElementAttributes(wellElement);
-              const wellData = this.mapAttributesToWellData(wellElement, attributes);
+              // mapAttributesToWellData is now async, so we await its result
+              const wellData = await this.mapAttributesToWellData(wellElement, attributes);
               if (wellData) {
                 wells.push(wellData);
               }
@@ -438,9 +475,9 @@ export class ClientSidePIAFService {
   }
 
   // Map attributes to well data
-  private mapAttributesToWellData(element: AFElement, attributes: AFAttribute[]): WellData | null {
+  private async mapAttributesToWellData(element: AFElement, attributes: AFAttribute[]): Promise<WellData | null> {
     try {
-      console.log(`[STRICT MAPPING V2] For well: "${element.Name}"`);
+      console.log(`[STRICT MAPPING V3] For well: "${element.Name}"`);
       console.log(`   Using attributeMapping from settings (pi-config.json):`, JSON.parse(JSON.stringify(this.attributeMapping)));
       
       const allElementAttributesMap: { [key: string]: AFAttribute } = {};
@@ -448,36 +485,45 @@ export class ClientSidePIAFService {
         allElementAttributesMap[attr.Name] = attr;
       });
       
-      // Log some of the actual attribute names loaded from the PI Element for comparison
       const availableNamesFromServer = Object.keys(allElementAttributesMap);
-      console.log(`   Actual attribute names loaded from PI Element "${element.Name}" (first 20 of ${availableNamesFromServer.length}):`, availableNamesFromServer.slice(0, 20).join(', ') + (availableNamesFromServer.length > 20 ? '...' : ''));
+      console.log(`   Actual attribute definitions loaded from PI Element "${element.Name}" (first 20 of ${availableNamesFromServer.length}):`, availableNamesFromServer.slice(0, 20).join(', ') + (availableNamesFromServer.length > 20 ? '...' : ''));
 
       const wellDataDirectProps: { [key: string]: number } = {};
-      const wellTileAttributes: { [key: string]: number | string } = {}; // This will become well.attributes
+      const wellTileAttributes: { [key: string]: number | string } = {};
 
-      // Iterate ONLY over the attributeMapping from settings
-      for (const settingsKey in this.attributeMapping) { // e.g., settingsKey = "oilRate"
-        const piAfAttributeName = this.attributeMapping[settingsKey as keyof AttributeMapping]; // e.g., piAfAttributeName = "Oil Production Rate"
+      for (const settingsKey in this.attributeMapping) {
+        const piAfAttributeName = this.attributeMapping[settingsKey as keyof AttributeMapping];
+        let numericValue: number | null = null;
         
         if (piAfAttributeName) {
-          console.log(`   Processing settingsKey "${settingsKey}" -> Attempting to find PI AF Attribute: "${piAfAttributeName}"`);
+          console.log(`   Processing settingsKey "${settingsKey}" -> Looking for PI AF Attribute Definition: "${piAfAttributeName}"`);
           const attributeFromElement = allElementAttributesMap[piAfAttributeName];
           
           if (attributeFromElement) {
-            console.log(`     ✅ FOUND PI Attr "${piAfAttributeName}". Raw Value Object from server:`, attributeFromElement.Value !== undefined ? JSON.parse(JSON.stringify(attributeFromElement.Value)) : "Value object is undefined");
+            console.log(`     ✅ FOUND PI Attr Definition "${piAfAttributeName}". WebId: ${attributeFromElement.WebId}`);
+            if (attributeFromElement.Links?.Value) {
+              try {
+                console.log(`       🔗 Fetching value from: ${attributeFromElement.Links.Value}`);
+                const valueResponse = await fetch(attributeFromElement.Links.Value, this.getFetchOptions());
+                if (valueResponse.ok) {
+                  const valueData: AFValueContainer = await valueResponse.json();
+                  console.log(`       📊 Fetched Value Data for "${piAfAttributeName}":`, valueData ? JSON.parse(JSON.stringify(valueData)) : "undefined valueData");
+                  numericValue = this.getNumericValue(valueData, piAfAttributeName);
+                } else {
+                  const errorText = await valueResponse.text();
+                  console.warn(`       ⚠️ Failed to fetch value for "${piAfAttributeName}" from ${attributeFromElement.Links.Value}. Status: ${valueResponse.status}. Response: ${errorText}`);
+                }
+              } catch (e: any) {
+                console.error(`       ❌ Error fetching value for "${piAfAttributeName}" from ${attributeFromElement.Links.Value}: ${e.message}`, e);
+              }
+            } else {
+              console.warn(`       ⚠️ PI Attr "${piAfAttributeName}" found, but no Links.Value URL to fetch its value. Attribute Links:`, attributeFromElement.Links ? JSON.parse(JSON.stringify(attributeFromElement.Links)) : "undefined Links");
+            }
           } else {
-            console.log(`     ❌ PI Attr "${piAfAttributeName}" NOT FOUND among attributes on element "${element.Name}".`);
+            console.log(`     ❌ PI Attr Definition "${piAfAttributeName}" NOT FOUND among attributes on element "${element.Name}".`);
           }
           
-          const numericValue = this.getNumericValue(attributeFromElement, piAfAttributeName); // Pass name for better logging
-
-          // Populate direct properties (oilRate, gasRate etc.) on WellData object
-          // These are keyed by settingsKey (e.g., "oilRate")
           wellDataDirectProps[settingsKey] = numericValue ?? 0;
-
-          // Populate the attributes object for the tile.
-          // This object is keyed by settingsKey (e.g., "oilRate")
-          // This allows DynamicWellTile to use its ATTRIBUTE_CONFIG directly.
           wellTileAttributes[settingsKey] = numericValue ?? 0;
           console.log(`     Mapped to wellTileAttributes["${settingsKey}"] = ${numericValue ?? 0}`);
         } else {
@@ -487,7 +533,7 @@ export class ClientSidePIAFService {
       
       console.log(`   Final wellTileAttributes for "${element.Name}" (becomes well.attributes):`, JSON.parse(JSON.stringify(wellTileAttributes)));
       if (Object.keys(wellTileAttributes).length === 0 && Object.keys(this.attributeMapping).length > 0) {
-        console.warn(`⚠️ WARNING: For well "${element.Name}", well.attributes is EMPTY but attributeMapping has ${Object.keys(this.attributeMapping).length} entries. Check PI AF attribute names and connectivity.`);
+        console.warn(`⚠️ WARNING: For well "${element.Name}", well.attributes is EMPTY but attributeMapping has ${Object.keys(this.attributeMapping).length} entries. Check PI AF attribute names, connectivity, and if Links.Value URLs are present/correct.`);
       }
     
       const oilRateForStatus = wellDataDirectProps['oilRate'] ?? 0;
@@ -518,22 +564,32 @@ export class ClientSidePIAFService {
   }
 
   // Safe numeric value extraction
-  private getNumericValue(attribute: AFAttribute | undefined, attributeNameForLog: string): number | null {
+  private getNumericValue(valueContainer: AFValueContainer | undefined, attributeNameForLog: string): number | null {
     console.log(`[getNumericValue] Processing PI Attribute: "${attributeNameForLog}"`);
-    if (!attribute) {
-      console.log(`   Attribute object for "${attributeNameForLog}" was not provided (likely not found on PI element). Returning null.`);
+    if (!valueContainer) {
+      console.log(`   ValueContainer for "${attributeNameForLog}" was not provided (e.g., fetch failed or attribute has no value link). Returning null.`);
       return null;
     }
-    if (typeof attribute.Value === 'undefined' || attribute.Value === null) {
-      console.log(`   Attribute "${attributeNameForLog}" has undefined or null Value CONTAINER object. Raw attribute:`, attribute !== undefined ? JSON.parse(JSON.stringify(attribute)) : "Attribute object is undefined");
-      return null;
+   
+    // The valueContainer is the object like { Value: ..., Timestamp: ..., Good: ..., Errors: ... }
+    // We are interested in valueContainer.Value
+    console.log(`   For "${attributeNameForLog}", Raw Value CONTAINER from PI (fetched via Links.Value):`, valueContainer ? JSON.parse(JSON.stringify(valueContainer)) : "undefined valueContainer");
+
+    if (valueContainer.Errors && valueContainer.Errors.length > 0) {
+      console.warn(`   Attribute "${attributeNameForLog}" has errors in its ValueContainer:`, valueContainer.Errors.join('; '));
+      // Depending on the error, you might still have a value or not.
+      // For now, if there are errors, we'll assume the value is not reliable.
+      // return null; // Or handle based on specific error types if needed
     }
-  
-    const valueContainer = attribute.Value;
-    const actualValue = valueContainer.Value; // This is the actual data point value
-  
-    console.log(`   For "${attributeNameForLog}", Raw Value CONTAINER from PI:`, valueContainer !== undefined ? JSON.parse(JSON.stringify(valueContainer)) : "Value container is undefined");
-    console.log(`   For "${attributeNameForLog}", Extracted ACTUAL VALUE:`, actualValue, `(Type: ${typeof actualValue})`);
+
+    if (valueContainer.Good === false) {
+      console.warn(`   Attribute "${attributeNameForLog}" has a Bad quality value.`);
+      // Decide if bad quality values should be treated as null or used.
+      // For now, let's proceed but be aware.
+    }
+    
+    const actualValue = valueContainer.Value; 
+    console.log(`   For "${attributeNameForLog}", Extracted ACTUAL VALUE from ValueContainer:`, actualValue, `(Type: ${typeof actualValue})`);
 
     if (actualValue === null || typeof actualValue === 'undefined') {
       console.log(`   Actual value for "${attributeNameForLog}" is null or undefined. Returning null.`);
