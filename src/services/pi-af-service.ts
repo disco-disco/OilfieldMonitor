@@ -2,6 +2,7 @@
 // This replaces the corrupted pi-af-service.ts
 
 import { WellPadData, WellData, PIServerConfig, AttributeMapping, DEFAULT_ATTRIBUTE_MAPPING } from '@/types/pi-system';
+import { WindowsAuthService, WindowsAuthError, PIWebAPIError } from './windows-auth-service';
 
 // Disable SSL certificate verification for development to handle self-signed certificates
 if (process.env.NODE_ENV !== 'production') {
@@ -48,6 +49,7 @@ export class PIAFService {
   private config: PIServerConfig;
   private workingEndpoint: string | null = null;
   private attributeMapping: AttributeMapping;
+  private authService: WindowsAuthService | null = null;
 
   constructor(config: PIServerConfig, attributeMapping?: AttributeMapping) {
     this.config = config;
@@ -58,26 +60,62 @@ export class PIAFService {
     console.log(`   - Element Path: ${config.parentElementPath}`);
     console.log(`   - Template Filter: ${config.templateName || 'None (processing all elements)'}`);
     console.log('🎯 Attribute mapping:', this.attributeMapping);
+    
+    // Log Windows Authentication support
+    if (WindowsAuthService.isWindowsAuthSupported()) {
+      console.log('🪟 Windows Authentication supported on this platform');
+    } else {
+      console.log('🚫 Windows Authentication not supported on this platform');
+      console.log('📋 Deployment instructions:');
+      WindowsAuthService.getDeploymentInstructions().forEach(instruction => {
+        console.log(`   - ${instruction}`);
+      });
+    }
   }
 
-  private getFetchOptions(): RequestInit {
-    return {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-        // Add Windows Authentication headers if credentials are provided
-        ...(this.config.username && this.config.password && {
-          'Authorization': `Basic ${Buffer.from(`${this.config.username}:${this.config.password}`).toString('base64')}`
-        })
-      },
-      credentials: 'include', // For Windows Authentication
-      // Bypass SSL certificate validation in development
-      ...(process.env.NODE_ENV !== 'production' && {
-        // Note: This requires agent configuration for Node.js
-      })
-    };
+  // Initialize Windows Authentication Service
+  private async initializeAuthService(): Promise<void> {
+    if (!this.authService) {
+      // Find the working endpoint first
+      const endpoint = await this.findWorkingEndpoint();
+      if (!endpoint) {
+        throw new Error('Cannot connect to PI Web API server');
+      }
+
+      this.authService = new WindowsAuthService({
+        serverUrl: endpoint,
+        timeout: 30000,
+        debug: true
+      });
+
+      console.log('🔐 Windows Authentication service initialized');
+    }
+  }
+
+  // Make authenticated request using Windows Authentication
+  private async makeAuthenticatedRequest(endpoint: string): Promise<any> {
+    await this.initializeAuthService();
+    
+    if (!this.authService) {
+      throw new Error('Authentication service not initialized');
+    }
+
+    try {
+      return await this.authService.makeRequest(endpoint);
+    } catch (error) {
+      if (error instanceof WindowsAuthError) {
+        console.error('🚫 Windows Authentication failed:', error.message);
+        console.log('💡 Help:', error.help);
+        throw new Error(`Windows Authentication required: ${error.message}`);
+      }
+      
+      if (error instanceof PIWebAPIError) {
+        console.error('❌ PI Web API error:', error.message);
+        throw new Error(`PI Web API error: ${error.message}`);
+      }
+      
+      throw error;
+    }
   }
 
   // Find working PI Web API endpoint
@@ -105,36 +143,27 @@ export class PIAFService {
     for (const endpoint of testEndpoints) {
       try {
         console.log(`🧪 Testing PI Web API at: ${endpoint}`);
-        const response = await fetch(endpoint, this.getFetchOptions());
-        console.log(`   Status: ${response.status} ${response.statusText}`);
+        
+        // Create a temporary auth service for testing
+        const testAuthService = new WindowsAuthService({
+          serverUrl: endpoint,
+          timeout: 10000,
+          debug: false
+        });
+
+        const connectionTest = await testAuthService.testConnection();
+        console.log(`   Status: ${connectionTest.status} - ${connectionTest.message}`);
 
         // Success conditions: 
         // - 200 OK (working)
         // - 401 Unauthorized (working but needs auth)
         // - 403 Forbidden (working but needs permission)
-        if (response.ok || response.status === 401 || response.status === 403) {
+        if (connectionTest.success || connectionTest.status === 401 || connectionTest.status === 403) {
           this.workingEndpoint = endpoint;
-          console.log(`✅ Working endpoint found: ${endpoint} (Status: ${response.status})`);
+          console.log(`✅ Working endpoint found: ${endpoint} (Status: ${connectionTest.status})`);
           return endpoint;
         }
         
-        // If we get a redirect, follow it
-        if (response.status >= 300 && response.status < 400) {
-          const location = response.headers.get('location');
-          if (location) {
-            console.log(`🔀 Got redirect to: ${location}`);
-            try {
-              const redirectResponse = await fetch(location, this.getFetchOptions());
-              if (redirectResponse.ok || redirectResponse.status === 401 || redirectResponse.status === 403) {
-                this.workingEndpoint = location;
-                console.log(`✅ Working endpoint found via redirect: ${location}`);
-                return location;
-              }
-            } catch (redirectError) {
-              console.log(`❌ Redirect failed: ${redirectError}`);
-            }
-          }
-        }
       } catch (error) {
         console.log(`❌ Failed: ${endpoint} - ${error}`);
         continue;
@@ -148,7 +177,14 @@ export class PIAFService {
     console.log(`   3. Verify network connectivity to the server`);
     console.log(`   4. Check if Windows Authentication is properly configured`);
     console.log(`   5. Ensure PI Web API is installed and configured on the server`);
+    
+    // Add platform-specific guidance
+    if (!WindowsAuthService.isWindowsAuthSupported()) {
+      console.log(`   6. Deploy to Windows for proper authentication support`);
+    }
+    
     return null;
+  }
   }
 
   // Load databases with WebID-based approach (CORRECT METHOD)

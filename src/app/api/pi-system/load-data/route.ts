@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PIAFService } from '@/services/pi-af-service';
+import { PIAFService } from '@/services/pi-af-service-enhanced';
 import { configManager } from '@/services/config-manager';
 
 export async function GET() {

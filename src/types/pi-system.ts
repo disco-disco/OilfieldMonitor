@@ -29,9 +29,32 @@ export interface PIElement {
 export interface WellData {
   id: string;
   name: string;
-  status: 'active' | 'inactive';
+  status: 'active' | 'inactive' | 'alert' | 'warning' | 'good';
+  wellPadName?: string;
   attributes: { [key: string]: number | string };
   lastUpdated: string;
+  // Production data properties
+  oilRate: number;
+  gasRate: number;
+  waterCut: number;
+  waterRate: number;
+  liquidRate: number;
+  espFrequency?: number;
+  tubingPressure?: number;
+  casingPressure?: number;
+  temperature?: number;
+  chokeSize?: number;
+  gasLiftRate?: number;
+  pumpSpeed?: number;
+  motorAmps?: number;
+  vibration?: number;
+  runtime?: number;
+  shutinTime?: number;
+  wellheadPressure?: number;
+  bottomholePressure?: number;
+  flowRate?: number;
+  flowlinePressure?: number;
+  planTarget?: number;
 }
 
 export interface WellPadData {
@@ -44,6 +67,11 @@ export interface WellPadData {
   totalWaterRate: number;
   averagePressure: number;
   lastUpdated: string;
+  status: 'active' | 'inactive' | 'alert' | 'warning' | 'good';
+  totalWells: number;
+  avgOilRate: number;
+  avgWaterCut: number;
+  activeWells?: number;
 }
 
 // PI AF Connection Status

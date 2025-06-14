@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Droplets, RefreshCw, Settings, Activity } from "lucide-react";
+import { Droplets, RefreshCw, Settings, Activity, Shield } from "lucide-react";
 import PISystemConfig from '@/components/PISystemConfig';
 
 // Simple working dashboard that avoids hydration issues
@@ -14,6 +14,7 @@ export default function Home() {
   const [lastPIError, setLastPIError] = useState<string | null>(null);
   const [showConfig, setShowConfig] = useState(false);
   const [isPIConfigured, setIsPIConfigured] = useState(false);
+  const [authTestResult, setAuthTestResult] = useState<any>(null);
 
   // Simple button click handler that definitely works
   const handleLoadData = async () => {
@@ -71,6 +72,45 @@ export default function Home() {
       setWellPads(fallbackData);
       setCurrentMode('development');
       setLastUpdated(new Date());
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Test Windows Authentication
+  const handleTestWindowsAuth = async () => {
+    console.log('🔐 Testing Windows Authentication...');
+    setIsLoading(true);
+    setAuthTestResult(null);
+    
+    try {
+      const response = await fetch('/api/pi-system/test-windows-auth');
+      const result = await response.json();
+      
+      console.log('🔐 Windows Auth Test Results:', result);
+      setAuthTestResult(result);
+      
+      // Display results in browser console and alert
+      if (result.success) {
+        console.log('✅ Windows Authentication Test PASSED');
+        console.log(`📊 Summary: ${result.summary.workingEndpoints}/${result.summary.totalEndpointsTested} endpoints working`);
+        if (result.summary.bestEndpoint) {
+          console.log(`🎯 Best endpoint: ${result.summary.bestEndpoint}`);
+        }
+      } else {
+        console.log('❌ Windows Authentication Test FAILED');
+        console.log('💡 Recommendations:', result.recommendations);
+      }
+      
+      // Show platform info
+      console.log('🖥️ Platform Info:', result.platformInfo);
+      
+    } catch (error) {
+      console.error('❌ Windows Auth test error:', error);
+      setAuthTestResult({
+        success: false,
+        error: error instanceof Error ? error.message : String(error)
+      });
     } finally {
       setIsLoading(false);
     }
@@ -182,6 +222,15 @@ export default function Home() {
                 <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
                 {isLoading ? 'Loading...' : 'Load Data'}
               </button>
+              
+              <button
+                onClick={handleTestWindowsAuth}
+                disabled={isLoading}
+                className="flex items-center gap-2 px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
+              >
+                <Shield className="w-4 h-4" />
+                Test Auth
+              </button>
             </div>
           </div>
         </div>
@@ -197,6 +246,68 @@ export default function Home() {
                 setShowConfig(false);
               }} 
             />
+          </div>
+        </div>
+      )}
+
+      {/* Windows Authentication Test Results */}
+      {authTestResult && (
+        <div className="bg-white border-b border-slate-200 shadow-sm">
+          <div className="container mx-auto px-6 py-6">
+            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Shield className="w-5 h-5" />
+              Windows Authentication Test Results
+            </h3>
+            
+            {authTestResult.success ? (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                  <span className="font-medium text-green-900">✅ Authentication Test PASSED</span>
+                </div>
+                <div className="text-sm text-green-700 space-y-1">
+                  <p>📊 Working Endpoints: {authTestResult.summary?.workingEndpoints}/{authTestResult.summary?.totalEndpointsTested}</p>
+                  <p>🔐 Auth Required: {authTestResult.summary?.authRequiredEndpoints} endpoints need Windows Authentication</p>
+                  {authTestResult.summary?.bestEndpoint && (
+                    <p>🎯 Best Endpoint: <code className="bg-green-100 px-1 rounded">{authTestResult.summary.bestEndpoint}</code></p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                  <span className="font-medium text-red-900">❌ Authentication Test FAILED</span>
+                </div>
+                <div className="text-sm text-red-700 space-y-1">
+                  {authTestResult.error && <p>Error: {authTestResult.error}</p>}
+                  {authTestResult.recommendations && (
+                    <div>
+                      <p className="font-medium mt-2">💡 Recommendations:</p>
+                      <ul className="list-disc list-inside space-y-1">
+                        {authTestResult.recommendations.slice(0, 5).map((rec: string, index: number) => (
+                          <li key={index}>{rec}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            {authTestResult.platformInfo && (
+              <div className="mt-4 p-3 bg-gray-50 rounded border text-sm">
+                <p><strong>Platform:</strong> {authTestResult.platformInfo.platform}</p>
+                <p><strong>Windows Auth Supported:</strong> {authTestResult.platformInfo.supportsWindowsAuth ? '✅ Yes' : '❌ No'}</p>
+              </div>
+            )}
+            
+            <button 
+              onClick={() => setAuthTestResult(null)}
+              className="mt-3 text-sm text-gray-600 hover:text-gray-800"
+            >
+              ✕ Close Results
+            </button>
           </div>
         </div>
       )}
