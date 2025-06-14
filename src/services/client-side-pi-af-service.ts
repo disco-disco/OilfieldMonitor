@@ -423,7 +423,7 @@ export class ClientSidePIAFService {
           const attributeFromElement = allElementAttributesMap[piAfAttributeName];
           
           if (attributeFromElement) {
-            console.log(`     ✅ FOUND PI Attr "${piAfAttributeName}". Raw Value Object from server:`, JSON.parse(JSON.stringify(attributeFromElement.Value)));
+            console.log(`     ✅ FOUND PI Attr "${piAfAttributeName}". Raw Value Object from server:`, attributeFromElement.Value !== undefined ? JSON.parse(JSON.stringify(attributeFromElement.Value)) : "Value object is undefined");
           } else {
             console.log(`     ❌ PI Attr "${piAfAttributeName}" NOT FOUND among attributes on element "${element.Name}".`);
           }
@@ -484,14 +484,14 @@ export class ClientSidePIAFService {
       return null;
     }
     if (typeof attribute.Value === 'undefined' || attribute.Value === null) {
-      console.log(`   Attribute "${attributeNameForLog}" has undefined or null Value CONTAINER object. Raw attribute:`, JSON.parse(JSON.stringify(attribute)));
+      console.log(`   Attribute "${attributeNameForLog}" has undefined or null Value CONTAINER object. Raw attribute:`, attribute !== undefined ? JSON.parse(JSON.stringify(attribute)) : "Attribute object is undefined");
       return null;
     }
   
     const valueContainer = attribute.Value;
     const actualValue = valueContainer.Value; // This is the actual data point value
   
-    console.log(`   For "${attributeNameForLog}", Raw Value CONTAINER from PI:`, JSON.parse(JSON.stringify(valueContainer)));
+    console.log(`   For "${attributeNameForLog}", Raw Value CONTAINER from PI:`, valueContainer !== undefined ? JSON.parse(JSON.stringify(valueContainer)) : "Value container is undefined");
     console.log(`   For "${attributeNameForLog}", Extracted ACTUAL VALUE:`, actualValue, `(Type: ${typeof actualValue})`);
 
     if (actualValue === null || typeof actualValue === 'undefined') {
