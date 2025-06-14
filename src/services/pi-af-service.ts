@@ -55,7 +55,7 @@ export class PIAFService {
     console.log('🎯 PI AF Service initialized with configuration:');
     console.log(`   - AF Server: ${config.afServerName}`);
     console.log(`   - Database: ${config.afDatabaseName}`);
-    console.log(`   - Element Path: ${config.elementPath}`);
+    console.log(`   - Element Path: ${config.parentElementPath}`);
     console.log(`   - Template Filter: ${config.templateName || 'None (processing all elements)'}`);
     console.log('🎯 Attribute mapping:', this.attributeMapping);
   }

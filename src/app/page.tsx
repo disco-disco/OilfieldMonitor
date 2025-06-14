@@ -138,7 +138,7 @@ export default function Home() {
                 <Droplets className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-slate-900">PLINQO OILFIELD</h1>
+                <h1 className="text-xl font-bold text-slate-900">Oilfield Monitoring Dashboard</h1>
                 <p className="text-sm text-slate-500">WellPads & Production Monitoring</p>
               </div>
             </div>
@@ -209,12 +209,12 @@ export default function Home() {
           {/* Welcome Message */}
           {wellPads.length === 0 && (
             <div className="p-6 bg-blue-50 rounded-lg border border-blue-200 mb-6">
-              <h3 className="font-semibold text-blue-900 mb-2">Welcome to PLINQO Oilfield Dashboard! 🚀</h3>
+              <h3 className="font-semibold text-blue-900 mb-2">Welcome to Oilfield Monitoring Dashboard! 🚀</h3>
               <p className="text-blue-700 text-sm mb-2">
                 This dashboard loads real well data from PI System when configured in production mode.
               </p>
               <p className="text-blue-600 text-sm">
-                Click "Load Data" to start loading your wells from AF database: <strong>WQ2</strong>
+                Click "Load Data" to start loading your wells from your configured AF database.
               </p>
             </div>
           )}

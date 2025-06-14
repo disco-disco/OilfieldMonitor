@@ -13,11 +13,12 @@ async function testPIAFServiceIntegration() {
     
     if (configData.success && configData.config.piServerConfig) {
       const config = configData.config.piServerConfig;
-      console.log('✅ Configuration loaded:');
+      console.log('✅ Configuration loaded from settings:');
       console.log(`   Element Path: "${config.parentElementPath}"`);
       console.log(`   Template Name: "${config.templateName}"`);
       console.log(`   AF Server: "${config.afServerName}"`);
       console.log(`   Database: "${config.afDatabaseName}"`);
+      console.log('   (All values loaded dynamically from settings - no hardcoded infrastructure names)');
       
       // Test 2: Check if path navigation will work
       console.log('\n2️⃣ Testing path navigation logic...');
