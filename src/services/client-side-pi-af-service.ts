@@ -405,9 +405,11 @@ export class ClientSidePIAFService {
       const allElementAttributesMap: { [key: string]: AFAttribute } = {};
       attributes.forEach(attr => {
         allElementAttributesMap[attr.Name] = attr;
-        // console.log(`     Raw Attr from Element: "${attr.Name}", Value:`, attr.Value);
       });
-      // console.log(`   All attributes found on PI Element "${element.Name}":`, Object.keys(allElementAttributesMap));
+      
+      // Log some of the actual attribute names loaded from the PI Element for comparison
+      const availableNamesFromServer = Object.keys(allElementAttributesMap);
+      console.log(`   Actual attribute names loaded from PI Element "${element.Name}" (first 20 of ${availableNamesFromServer.length}):`, availableNamesFromServer.slice(0, 20).join(', ') + (availableNamesFromServer.length > 20 ? '...' : ''));
 
       const wellDataDirectProps: { [key: string]: number } = {};
       const wellTileAttributes: { [key: string]: number | string } = {}; // This will become well.attributes
@@ -417,13 +419,13 @@ export class ClientSidePIAFService {
         const piAfAttributeName = this.attributeMapping[settingsKey as keyof AttributeMapping]; // e.g., piAfAttributeName = "Oil Production Rate"
         
         if (piAfAttributeName) {
-          console.log(`   Processing settingsKey "${settingsKey}" -> piAfAttributeName "${piAfAttributeName}"`);
+          console.log(`   Processing settingsKey "${settingsKey}" -> Attempting to find PI AF Attribute: "${piAfAttributeName}"`);
           const attributeFromElement = allElementAttributesMap[piAfAttributeName];
           
           if (attributeFromElement) {
-            // console.log(`     Found PI Attr "${piAfAttributeName}". Raw Value Object:`, attributeFromElement.Value);
+            console.log(`     ✅ FOUND PI Attr "${piAfAttributeName}". Raw Value Object from server:`, JSON.parse(JSON.stringify(attributeFromElement.Value)));
           } else {
-            console.log(`     PI Attr "${piAfAttributeName}" NOT FOUND on element "${element.Name}".`);
+            console.log(`     ❌ PI Attr "${piAfAttributeName}" NOT FOUND among attributes on element "${element.Name}".`);
           }
           
           const numericValue = this.getNumericValue(attributeFromElement, piAfAttributeName); // Pass name for better logging
@@ -476,59 +478,64 @@ export class ClientSidePIAFService {
 
   // Safe numeric value extraction
   private getNumericValue(attribute: AFAttribute | undefined, attributeNameForLog: string): number | null {
-    // console.log(`[getNumericValue] For PI Attribute: "${attributeNameForLog}"`);
+    console.log(`[getNumericValue] Processing PI Attribute: "${attributeNameForLog}"`);
     if (!attribute) {
-      // console.log(`   Attribute not provided or undefined.`);
+      console.log(`   Attribute object for "${attributeNameForLog}" was not provided (likely not found on PI element). Returning null.`);
       return null;
     }
     if (typeof attribute.Value === 'undefined' || attribute.Value === null) {
-      console.log(`   Attribute "${attributeNameForLog}" has undefined or null Value object.`);
+      console.log(`   Attribute "${attributeNameForLog}" has undefined or null Value CONTAINER object. Raw attribute:`, JSON.parse(JSON.stringify(attribute)));
       return null;
     }
   
     const valueContainer = attribute.Value;
     const actualValue = valueContainer.Value; // This is the actual data point value
   
-    // console.log(`   Raw Value from PI for "${attributeNameForLog}":`, JSON.parse(JSON.stringify(valueContainer)));
-    // console.log(`   Actual data point value (actualValue):`, actualValue, `(Type: ${typeof actualValue})`);
+    console.log(`   For "${attributeNameForLog}", Raw Value CONTAINER from PI:`, JSON.parse(JSON.stringify(valueContainer)));
+    console.log(`   For "${attributeNameForLog}", Extracted ACTUAL VALUE:`, actualValue, `(Type: ${typeof actualValue})`);
 
-    if (typeof actualValue === 'object' && actualValue !== null) {
+    if (actualValue === null || typeof actualValue === 'undefined') {
+      console.log(`   Actual value for "${attributeNameForLog}" is null or undefined. Returning null.`);
+      return null;
+    }
+
+    if (typeof actualValue === 'object') {
       const nestedValue = (actualValue as any).Value;
       const nestedName = (actualValue as any).Name;
       console.log(`   Attribute "${attributeNameForLog}" has complex object value (Name: ${nestedName}). Attempting to find nested Value.`);
       if (typeof nestedValue === 'number') {
-        console.log(`     Found nested numeric value: ${nestedValue}`);
+        console.log(`     Found nested numeric value for "${attributeNameForLog}": ${nestedValue}`);
         return isNaN(nestedValue) ? null : nestedValue;
       }
       if (typeof nestedValue === 'string') {
         const parsedNested = parseFloat(nestedValue);
-        console.log(`     Found nested string value "${nestedValue}", parsed to: ${parsedNested}`);
+        console.log(`     Found nested string value "${nestedValue}" for "${attributeNameForLog}", parsed to: ${parsedNested}`);
         return isNaN(parsedNested) ? null : parsedNested;
       }
-      console.warn(`     Complex object for "${attributeNameForLog}" does not contain a usable nested numeric Value. Name: ${nestedName}, Value: ${nestedValue}`);
+      console.warn(`     Complex object for "${attributeNameForLog}" does not contain a usable nested numeric Value. Name: ${nestedName}, Value: ${nestedValue}. Returning null.`);
       return null; 
     }
   
     if (typeof actualValue === 'number') {
-      // console.log(`   Value for "${attributeNameForLog}" is number: ${actualValue}.`);
+      console.log(`   Value for "${attributeNameForLog}" is already a number: ${actualValue}.`);
       return isNaN(actualValue) ? null : actualValue;
     }
     
     if (typeof actualValue === 'string') {
       if (actualValue.trim() === '') {
-        console.log(`   Value for "${attributeNameForLog}" is empty string.`);
+        console.log(`   Value for "${attributeNameForLog}" is empty string. Returning null.`);
         return null;
       }
       const parsed = parseFloat(actualValue);
-      // console.log(`   Value for "${attributeNameForLog}" is string: "${actualValue}", parsed to: ${parsed}.`);
+      console.log(`   Value for "${attributeNameForLog}" is string: "${actualValue}", parsed to: ${parsed}.`);
       if (isNaN(parsed)) {
-         console.log(`     String value "${actualValue}" for "${attributeNameForLog}" is not a number (NaN).`);
+         console.log(`     String value "${actualValue}" for "${attributeNameForLog}" is not a number (NaN). Returning null.`);
          return null;
       }
       return parsed;
     }
     
-    console.log(`   Value for "${attributeNameForLog}" (type ${typeof actualValue}, value ${actualValue}) is not handled for numeric conversion.`);
+    console.log(`   Value for "${attributeNameForLog}" (type ${typeof actualValue}, value ${JSON.stringify(actualValue)}) is not a number, string, or recognized object. Returning null.`);
     return null;
   }
 
