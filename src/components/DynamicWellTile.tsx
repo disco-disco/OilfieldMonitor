@@ -190,7 +190,7 @@ export default function DynamicWellTile({ well, availableAttributes, compact = f
     // Use the new attributes structure
     if (well.attributes) {
       Object.entries(well.attributes).forEach(([attributeName, value]) => {
-        if (typeof value === 'number') {
+        if (typeof value === 'number') { // Accept all numeric values, including zero
           attributes.push({
             key: attributeName,
             value,

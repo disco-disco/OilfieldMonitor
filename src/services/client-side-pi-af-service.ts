@@ -400,8 +400,13 @@ export class ClientSidePIAFService {
   private mapAttributesToWellData(element: AFElement, attributes: AFAttribute[]): WellData | null {
     try {
       console.log(`🎯 Mapping attributes for: ${element.Name}`);
-      console.log(`   Available attributes: [${attributes.map(a => a.Name).join(', ')}]`);
+      console.log(`   Available attributes (${attributes.length}): [${attributes.map(a => a.Name).join(', ')}]`);
       console.log(`   Attribute mapping config:`, this.attributeMapping);
+      
+      // Log each attribute with its value for debugging
+      attributes.forEach(attr => {
+        console.log(`     - "${attr.Name}": ${attr.Value?.Value} (type: ${typeof attr.Value?.Value})`);
+      });
       
       // Create attribute lookup map
       const attributeMap: { [key: string]: AFAttribute } = {};
@@ -502,25 +507,25 @@ export class ClientSidePIAFService {
       // Build the attributes object with custom display names for the tile component
       const displayAttributes: { [key: string]: number | string } = {};
       
-      // Use display values (either original or fallback) for the attributes object
-      if (this.attributeMapping.oilRate && displayOilRate > 0) {
+      // ALWAYS populate core attributes, even if zero - this ensures tiles show data
+      if (this.attributeMapping.oilRate) {
         displayAttributes[this.attributeMapping.oilRate] = displayOilRate;
       }
-      if (this.attributeMapping.liquidRate && displayLiquidRate > 0) {
+      if (this.attributeMapping.liquidRate) {
         displayAttributes[this.attributeMapping.liquidRate] = displayLiquidRate;
       }
-      if (this.attributeMapping.waterCut && displayWaterCut > 0) {
+      if (this.attributeMapping.waterCut) {
         displayAttributes[this.attributeMapping.waterCut] = displayWaterCut;
       }
-      if (this.attributeMapping.espFrequency && espFrequency > 0) {
+      if (this.attributeMapping.espFrequency) {
         displayAttributes[this.attributeMapping.espFrequency] = espFrequency;
       }
       
-      // Add extended attributes using custom names
-      if (this.attributeMapping.gasRate && displayGasRate > 0) {
+      // Add extended attributes using custom names  
+      if (this.attributeMapping.gasRate && displayGasRate !== undefined) {
         displayAttributes[this.attributeMapping.gasRate] = displayGasRate;
       }
-      if (this.attributeMapping.tubingPressure && tubingPressure !== undefined && tubingPressure !== null && tubingPressure > 0) {
+      if (this.attributeMapping.tubingPressure && tubingPressure !== undefined && tubingPressure !== null) {
         displayAttributes[this.attributeMapping.tubingPressure] = tubingPressure;
       }
       
@@ -537,7 +542,7 @@ export class ClientSidePIAFService {
       attributes.forEach(attr => {
         if (!standardAttributeNames.has(attr.Name)) {
           const value = this.getNumericValue(attr);
-          if (value !== null && value !== 0) {
+          if (value !== null) { // Include zero values for completeness
             displayAttributes[attr.Name] = value;
             console.log(`📊 Added additional attribute: ${attr.Name} = ${value}`);
           }
@@ -547,6 +552,15 @@ export class ClientSidePIAFService {
       console.log(`✅ Successfully mapped ${Object.keys(displayAttributes).length} attributes for "${element.Name}"`);
       console.log(`   Final display attributes:`, displayAttributes);
       console.log(`   Using values: Oil=${displayOilRate}, Liquid=${displayLiquidRate}, Water=${displayWaterCut}%, Gas=${displayGasRate}`);
+
+      if (Object.keys(displayAttributes).length === 0) {
+        console.log(`⚠️ WARNING: No attributes were mapped for "${element.Name}"`);
+        console.log(`   This means either:`);
+        console.log(`   1. No attributes were found on the element`);
+        console.log(`   2. Attribute names don't match the configuration`);
+        console.log(`   3. All attribute values are zero/null`);
+        console.log(`   4. Authentication issues prevented attribute loading`);
+      }
 
       return {
         id: element.WebId || `well-${element.Name}`,

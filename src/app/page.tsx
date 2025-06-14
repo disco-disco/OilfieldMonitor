@@ -47,6 +47,10 @@ export default function Home() {
           
           if (clientResult && clientResult.length > 0) {
             console.log('✅ SUCCESS: Real PI AF data loaded via client-side service!');
+            console.log('🔍 Detailed client result structure:', JSON.stringify(clientResult, null, 2));
+            console.log('🔍 First wellpad structure:', clientResult[0]);
+            console.log('🔍 First well structure:', clientResult[0]?.wells?.[0]);
+            console.log('🔍 First well attributes:', clientResult[0]?.wells?.[0]?.attributes);
             setWellPads(clientResult);
             setDataSource('pi-af');
             setCurrentMode('production');
