@@ -263,31 +263,72 @@ export class ClientSidePIAFService {
 
     console.log(`🔍 Loading attributes for element: "${element.Name}" (WebId: ${element.WebId})`);
 
+    // Define the fields to select, including the 'Value' field for current values
+    const fieldsToSelect = [
+      "Name", "Path", "Type", "Value", "WebId", "Links", 
+      "DefaultUnitsName", "DefaultUnitsNameAbbreviation", "DisplayDigits",
+      "DataReferencePlugIn", "ConfigString", "IsConfigurationItem", "IsExcluded",
+      "IsHidden", "IsManualDataEntry", "HasChildren", "CategoryNames",
+      "Step", "TraitName", "Span", "Zero"
+    ];
+    const selectedFieldsQuery = `selectedFields=Items.${fieldsToSelect.join(';Items.')}`;
+    // Ensure this.workingEndpoint is not null, already checked above
+    const attributesUrl = `${this.workingEndpoint}/elements/${element.WebId}/attributes?${selectedFieldsQuery}`;
+
+    console.log(`   Fetching attributes and their values from URL: ${attributesUrl}`);
+
     try {
-      const response = await fetch(`${this.workingEndpoint}/elements/${element.WebId}/attributes`, this.getFetchOptions());
+      const response = await fetch(attributesUrl, this.getFetchOptions());
       
       if (!response.ok) {
-        // Log the status but don't treat 401 as a fatal error for attribute loading
         if (response.status === 401) {
-          console.log(`⚠️ Windows Authentication required for attributes on "${element.Name}" - this is expected`);
-          return [];
+          console.warn(`⚠️ Windows Authentication required for attributes on "${element.Name}". Values may not be loaded if PI Web API requires re-auth for this specific call.`);
+          // If auth fails here, we likely won't get values.
+          return []; 
         }
-        throw new Error(`Failed to load attributes: ${response.status} ${response.statusText}`);
+        const errorText = await response.text(); // Read response text for detailed error
+        console.error(`   Failed to load attributes for "${element.Name}": ${response.status} ${response.statusText}. URL: ${attributesUrl}. Response: ${errorText}`);
+        throw new Error(`Failed to load attributes for "${element.Name}": ${response.status} ${response.statusText}. Details: ${errorText}`);
       }
 
       const data = await response.json();
-      const attributes = data.Items || [];
+      const attributes: AFAttribute[] = data.Items || [];
       
-      console.log(`✅ Loaded ${attributes.length} attributes for "${element.Name}"`);
+      console.log(`✅ Loaded ${attributes.length} attributes for "${element.Name}" using selectedFields.`);
+      
       if (attributes.length > 0) {
-        console.log(`   Available attributes: [${attributes.slice(0, 5).map((a: any) => a.Name).join(', ')}${attributes.length > 5 ? '...' : ''}]`);
+        let valueObjectsFound = 0;
+        let firstPopulatedAttributeName: string | undefined = undefined;
+        let firstPopulatedValue: any = undefined;
+
+        for (const attr of attributes) {
+          if (attr.Value !== undefined && attr.Value !== null) { // Check for presence of Value container
+            valueObjectsFound++;
+            if (firstPopulatedValue === undefined) { // Capture the first one found
+              firstPopulatedAttributeName = attr.Name;
+              firstPopulatedValue = attr.Value;
+            }
+          }
+        }
+
+        if (valueObjectsFound > 0) {
+          console.log(`   Successfully populated 'Value' objects for ${valueObjectsFound} out of ${attributes.length} attributes.`);
+          console.log(`   Example of a populated 'Value' object (for attribute "${firstPopulatedAttributeName || 'N/A'}"):`, 
+            firstPopulatedValue // Log the actual Value container object
+          );
+        } else {
+          console.warn(`   ⚠️ No attributes for "${element.Name}" were returned with a populated 'Value' object from ${attributesUrl}. This might mean attributes have no current value, 'selectedFields' is not working as expected, or the PI Web API version doesn't fully support this for all attributes.`);
+        }
+      } else {
+        console.log(`   No attributes found for "${element.Name}" from ${attributesUrl}.`);
       }
       
       return attributes;
 
     } catch (error) {
-      console.error(`❌ Failed to load attributes from "${element.Name}":`, error);
-      return [];
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error(`❌ Exception during attribute loading for "${element.Name}" from ${attributesUrl}: ${err.message}`, err.stack);
+      return []; 
     }
   }
 
