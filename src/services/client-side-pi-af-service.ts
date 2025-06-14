@@ -261,15 +261,29 @@ export class ClientSidePIAFService {
       throw new Error('No working endpoint available');
     }
 
+    console.log(`🔍 Loading attributes for element: "${element.Name}" (WebId: ${element.WebId})`);
+
     try {
       const response = await fetch(`${this.workingEndpoint}/elements/${element.WebId}/attributes`, this.getFetchOptions());
       
       if (!response.ok) {
+        // Log the status but don't treat 401 as a fatal error for attribute loading
+        if (response.status === 401) {
+          console.log(`⚠️ Windows Authentication required for attributes on "${element.Name}" - this is expected`);
+          return [];
+        }
         throw new Error(`Failed to load attributes: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
-      return data.Items || [];
+      const attributes = data.Items || [];
+      
+      console.log(`✅ Loaded ${attributes.length} attributes for "${element.Name}"`);
+      if (attributes.length > 0) {
+        console.log(`   Available attributes: [${attributes.slice(0, 5).map((a: any) => a.Name).join(', ')}${attributes.length > 5 ? '...' : ''}]`);
+      }
+      
+      return attributes;
 
     } catch (error) {
       console.error(`❌ Failed to load attributes from "${element.Name}":`, error);
@@ -385,6 +399,9 @@ export class ClientSidePIAFService {
   // Map attributes to well data
   private mapAttributesToWellData(element: AFElement, attributes: AFAttribute[]): WellData | null {
     try {
+      console.log(`🎯 Mapping attributes for: ${element.Name}`);
+      console.log(`   Available attributes: [${attributes.map(a => a.Name).join(', ')}]`);
+      
       // Create attribute lookup map
       const attributeMap: { [key: string]: AFAttribute } = {};
       attributes.forEach(attr => {
@@ -403,12 +420,59 @@ export class ClientSidePIAFService {
       const tubingPressure = this.attributeMapping.tubingPressure ?
         this.getNumericValue(attributeMap[this.attributeMapping.tubingPressure]) : undefined;
 
+      // Build the attributes object with custom display names for the tile component
+      const displayAttributes: { [key: string]: number | string } = {};
+      
+      // Add core attributes using custom names from mapping
+      if (this.attributeMapping.oilRate && oilRate !== null) {
+        displayAttributes[this.attributeMapping.oilRate] = oilRate;
+      }
+      if (this.attributeMapping.liquidRate && liquidRate !== null) {
+        displayAttributes[this.attributeMapping.liquidRate] = liquidRate;
+      }
+      if (this.attributeMapping.waterCut && waterCut !== null) {
+        displayAttributes[this.attributeMapping.waterCut] = waterCut;
+      }
+      if (this.attributeMapping.espFrequency && espFrequency !== null) {
+        displayAttributes[this.attributeMapping.espFrequency] = espFrequency;
+      }
+      
+      // Add extended attributes using custom names
+      if (this.attributeMapping.gasRate && gasRate !== undefined && gasRate !== null) {
+        displayAttributes[this.attributeMapping.gasRate] = gasRate;
+      }
+      if (this.attributeMapping.tubingPressure && tubingPressure !== undefined && tubingPressure !== null) {
+        displayAttributes[this.attributeMapping.tubingPressure] = tubingPressure;
+      }
+      
+      // Add any additional attributes found that aren't in the standard mapping
+      const standardAttributeNames = new Set([
+        this.attributeMapping.oilRate,
+        this.attributeMapping.liquidRate,
+        this.attributeMapping.waterCut,
+        this.attributeMapping.espFrequency,
+        this.attributeMapping.gasRate,
+        this.attributeMapping.tubingPressure
+      ].filter(Boolean));
+      
+      attributes.forEach(attr => {
+        if (!standardAttributeNames.has(attr.Name)) {
+          const value = this.getNumericValue(attr);
+          if (value !== null) {
+            displayAttributes[attr.Name] = value;
+          }
+        }
+      });
+
+      console.log(`✅ Successfully mapped ${Object.keys(displayAttributes).length} attributes for "${element.Name}"`);
+      console.log(`   Attributes: ${Object.keys(displayAttributes).join(', ')}`);
+
       return {
         id: element.WebId || `well-${element.Name}`,
         name: element.Name,
         status: oilRate > 0 ? 'active' : 'inactive',
         lastUpdated: new Date().toISOString(),
-        attributes: {},
+        attributes: displayAttributes,
         oilRate,
         gasRate: gasRate ?? 0,
         waterCut,
