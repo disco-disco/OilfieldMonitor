@@ -399,206 +399,136 @@ export class ClientSidePIAFService {
   // Map attributes to well data
   private mapAttributesToWellData(element: AFElement, attributes: AFAttribute[]): WellData | null {
     try {
-      console.log(`🎯 Mapping attributes for: ${element.Name}`);
-      console.log(`   Available attributes (${attributes.length}): [${attributes.map(a => a.Name).join(', ')}]`);
-      console.log(`   Attribute mapping config:`, this.attributeMapping);
-      
-      // Log each attribute with its value for debugging
-      attributes.forEach(attr => {
-        console.log(`     - "${attr.Name}": ${attr.Value?.Value} (type: ${typeof attr.Value?.Value})`);
-      });
-      
-      // Create attribute lookup map
+      console.log(`[STRICT MAPPING] Mapping attributes for: "${element.Name}". Using ONLY attributes from settings.`);
+      // console.log(`   Available attributes on element (${attributes.length}): [${attributes.map(a => a.Name).join(', ')}]`);
+      // console.log(`   Attribute mapping config from settings:`, this.attributeMapping);
+
       const attributeMap: { [key: string]: AFAttribute } = {};
       attributes.forEach(attr => {
         attributeMap[attr.Name] = attr;
       });
 
-      // Log detailed attribute lookup
-      console.log(`🔍 Looking for attributes:`, {
-        oilRateKey: this.attributeMapping.oilRate,
-        oilRateFound: !!attributeMap[this.attributeMapping.oilRate],
-        liquidRateKey: this.attributeMapping.liquidRate,
-        liquidRateFound: !!attributeMap[this.attributeMapping.liquidRate],
-        waterCutKey: this.attributeMapping.waterCut,
-        waterCutFound: !!attributeMap[this.attributeMapping.waterCut],
-        espFrequencyKey: this.attributeMapping.espFrequency,
-        espFrequencyFound: !!attributeMap[this.attributeMapping.espFrequency]
+      const wellDataDirectProps: { [key: string]: number } = {};
+      const wellTileAttributes: { [key: string]: number | string } = {};
+
+      // Define standard keys expected as direct properties on WellData object
+      // These keys correspond to the keys in `this.attributeMapping`
+      const standardWellDataKeys = [
+        'oilRate', 'liquidRate', 'waterCut', 'gasRate', 
+        'espFrequency', 'tubingPressure', 'casingPressure', 
+        // Add other specific keys from AttributeMapping that should be direct WellData properties
+      ];
+      
+      // Initialize direct properties to 0
+      standardWellDataKeys.forEach(key => {
+        wellDataDirectProps[key] = 0;
       });
 
-      // Extract core attributes using the attribute mapping
-      const oilRateAttr = attributeMap[this.attributeMapping.oilRate];
-      const liquidRateAttr = attributeMap[this.attributeMapping.liquidRate];
-      const waterCutAttr = attributeMap[this.attributeMapping.waterCut];
-      const espFrequencyAttr = attributeMap[this.attributeMapping.espFrequency];
-
-      console.log(`🔍 Attribute values:`, {
-        oilRate: oilRateAttr?.Value?.Value,
-        liquidRate: liquidRateAttr?.Value?.Value,
-        waterCut: waterCutAttr?.Value?.Value,
-        espFrequency: espFrequencyAttr?.Value?.Value
-      });
-
-      const oilRate = this.getNumericValue(oilRateAttr) ?? 0;
-      const liquidRate = this.getNumericValue(liquidRateAttr) ?? 0;
-      const waterCut = this.getNumericValue(waterCutAttr) ?? 0;
-      const espFrequency = this.getNumericValue(espFrequencyAttr) ?? 0;
-
-      console.log(`🔍 Final numeric values:`, {
-        oilRate,
-        liquidRate,
-        waterCut,
-        espFrequency
-      });
-
-      // Extract extended attributes
-      let gasRate = this.attributeMapping.gasRate ?
-        this.getNumericValue(attributeMap[this.attributeMapping.gasRate]) : undefined;
-      const tubingPressure = this.attributeMapping.tubingPressure ?
-        this.getNumericValue(attributeMap[this.attributeMapping.tubingPressure]) : undefined;
-
-      // Use actual values for individual properties, but try fallback for display
-      let displayOilRate = oilRate;
-      let displayLiquidRate = liquidRate;
-      let displayWaterCut = waterCut;
-      let displayGasRate = gasRate ?? 0;
-
-      // If all values are zero but we have attributes, try fallback approach
-      if (oilRate === 0 && liquidRate === 0 && waterCut === 0 && espFrequency === 0 && attributes.length > 0) {
-        console.log(`⚠️ All mapped values are zero but ${attributes.length} attributes exist - trying fallback strategy`);
+      // Iterate over the attributeMapping (from pi-config.json)
+      for (const configKey in this.attributeMapping) { // e.g., configKey = "oilRate"
+        const afAttributeName = this.attributeMapping[configKey as keyof AttributeMapping]; // e.g., afAttributeName = "Oil Production Rate"
         
-        // Try to find any numeric attribute that could be production data
-        attributes.forEach(attr => {
-          const value = this.getNumericValue(attr);
-          if (value !== null && value > 0) {
-            const attrNameLower = attr.Name.toLowerCase();
-            
-            // Look for oil-related attributes
-            if (attrNameLower.includes('oil') && (attrNameLower.includes('rate') || attrNameLower.includes('production'))) {
-              displayOilRate = value;
-              console.log(`🔍 Found oil rate fallback: ${attr.Name} = ${value}`);
-            }
-            // Look for liquid-related attributes  
-            else if (attrNameLower.includes('liquid') && (attrNameLower.includes('rate') || attrNameLower.includes('total'))) {
-              displayLiquidRate = value;
-              console.log(`🔍 Found liquid rate fallback: ${attr.Name} = ${value}`);
-            }
-            // Look for water cut
-            else if (attrNameLower.includes('water') && (attrNameLower.includes('cut') || attrNameLower.includes('percent'))) {
-              displayWaterCut = value;
-              console.log(`🔍 Found water cut fallback: ${attr.Name} = ${value}`);
-            }
-            // Look for gas production
-            else if (attrNameLower.includes('gas') && (attrNameLower.includes('rate') || attrNameLower.includes('production'))) {
-              displayGasRate = value;
-              console.log(`🔍 Found gas rate fallback: ${attr.Name} = ${value}`);
-            }
-          }
-        });
-        
-        console.log(`🔄 Updated values after fallback:`, {
-          displayOilRate,
-          displayLiquidRate,
-          displayWaterCut,
-          displayGasRate
-        });
-      }
+        if (afAttributeName) {
+          const attributeFromElement = attributeMap[afAttributeName];
+          const numericValue = this.getNumericValue(attributeFromElement); // Returns number or null
 
-      // Build the attributes object with custom display names for the tile component
-      const displayAttributes: { [key: string]: number | string } = {};
-      
-      // ALWAYS populate core attributes, even if zero - this ensures tiles show data
-      if (this.attributeMapping.oilRate) {
-        displayAttributes[this.attributeMapping.oilRate] = displayOilRate;
-      }
-      if (this.attributeMapping.liquidRate) {
-        displayAttributes[this.attributeMapping.liquidRate] = displayLiquidRate;
-      }
-      if (this.attributeMapping.waterCut) {
-        displayAttributes[this.attributeMapping.waterCut] = displayWaterCut;
-      }
-      if (this.attributeMapping.espFrequency) {
-        displayAttributes[this.attributeMapping.espFrequency] = espFrequency;
-      }
-      
-      // Add extended attributes using custom names  
-      if (this.attributeMapping.gasRate && displayGasRate !== undefined) {
-        displayAttributes[this.attributeMapping.gasRate] = displayGasRate;
-      }
-      if (this.attributeMapping.tubingPressure && tubingPressure !== undefined && tubingPressure !== null) {
-        displayAttributes[this.attributeMapping.tubingPressure] = tubingPressure;
-      }
-      
-      // Add any additional attributes found that aren't in the standard mapping
-      const standardAttributeNames = new Set([
-        this.attributeMapping.oilRate,
-        this.attributeMapping.liquidRate,
-        this.attributeMapping.waterCut,
-        this.attributeMapping.espFrequency,
-        this.attributeMapping.gasRate,
-        this.attributeMapping.tubingPressure
-      ].filter(Boolean));
-      
-      attributes.forEach(attr => {
-        if (!standardAttributeNames.has(attr.Name)) {
-          const value = this.getNumericValue(attr);
-          if (value !== null) { // Include zero values for completeness
-            displayAttributes[attr.Name] = value;
-            console.log(`📊 Added additional attribute: ${attr.Name} = ${value}`);
+          // Populate wellDataDirectProps (e.g., wellDataDirectProps.oilRate)
+          // These are used for calculations and direct access on the WellData object.
+          if (standardWellDataKeys.includes(configKey)) {
+             wellDataDirectProps[configKey] = numericValue ?? 0;
           }
+
+          // Populate wellTileAttributes (this goes into well.attributes for the tile)
+          // The key here MUST be the afAttributeName, as this is what the tile expects.
+          // This ensures the tile displays the attribute with its name from PI AF / config.
+          // All configured attributes will be added to wellTileAttributes, defaulting to 0 if not found or null.
+          wellTileAttributes[afAttributeName] = numericValue ?? 0; 
         }
-      });
-
-      console.log(`✅ Successfully mapped ${Object.keys(displayAttributes).length} attributes for "${element.Name}"`);
-      console.log(`   Final display attributes:`, displayAttributes);
-      console.log(`   Using values: Oil=${displayOilRate}, Liquid=${displayLiquidRate}, Water=${displayWaterCut}%, Gas=${displayGasRate}`);
-
-      if (Object.keys(displayAttributes).length === 0) {
-        console.log(`⚠️ WARNING: No attributes were mapped for "${element.Name}"`);
-        console.log(`   This means either:`);
-        console.log(`   1. No attributes were found on the element`);
-        console.log(`   2. Attribute names don't match the configuration`);
-        console.log(`   3. All attribute values are zero/null`);
-        console.log(`   4. Authentication issues prevented attribute loading`);
       }
+      
+      // console.log(`   WellData direct properties extracted:`, wellDataDirectProps);
+      console.log(`   Attributes for tile (well.attributes) for "${element.Name}":`, wellTileAttributes);
+
+      if (Object.keys(wellTileAttributes).length === 0 && Object.keys(this.attributeMapping).length > 0) {
+        console.warn(`⚠️ WARNING: For well "${element.Name}", no attributes were populated for the tile based on current settings, despite configuration existing.`);
+        console.warn(`   This means either configured PI AF attribute names were not found on the element, or their values were not parseable.`);
+      }
+    
+      const oilRateForStatus = wellDataDirectProps['oilRate'] ?? 0;
+      const liquidRateForCalc = wellDataDirectProps['liquidRate'] ?? 0;
+      const waterCutForCalc = wellDataDirectProps['waterCut'] ?? 0;
 
       return {
         id: element.WebId || `well-${element.Name}`,
         name: element.Name,
-        status: displayOilRate > 0 ? 'active' : 'inactive',
+        status: oilRateForStatus > 0 ? 'active' : 'inactive',
         lastUpdated: new Date().toISOString(),
-        attributes: displayAttributes,
-        oilRate: displayOilRate,
-        gasRate: displayGasRate,
-        waterCut: displayWaterCut,
-        waterRate: displayLiquidRate * (displayWaterCut / 100),
-        liquidRate: displayLiquidRate,
-        espFrequency,
-        ...(tubingPressure !== undefined && tubingPressure !== null && { tubingPressure })
+        
+        attributes: wellTileAttributes, // Used by DynamicWellTile, keyed by actual AF attribute names
+        
+        // Direct properties on WellData object, populated from configured mappings
+        oilRate: oilRateForStatus,
+        gasRate: wellDataDirectProps['gasRate'] ?? 0,
+        waterCut: waterCutForCalc,
+        liquidRate: liquidRateForCalc,
+        waterRate: liquidRateForCalc * (waterCutForCalc / 100), // Calculated
+        espFrequency: wellDataDirectProps['espFrequency'] ?? 0,
+        tubingPressure: wellDataDirectProps['tubingPressure'] ?? 0,
+        casingPressure: wellDataDirectProps['casingPressure'] ?? 0,
+        // Ensure any other direct properties defined in WellData type and needed for calcs are populated
       };
 
     } catch (error) {
-      console.error(`❌ Failed to map attributes for "${element.Name}":`, error);
+      const err = error as Error;
+      console.error(`❌ Error in strict mapAttributesToWellData for "${element.Name}": ${err.message}`, err.stack);
       return null;
     }
   }
 
-  // Safe numeric value extraction
+  // Safe numeric value extraction - ensure it handles various PI data states
   private getNumericValue(attribute: AFAttribute | undefined): number | null {
-    if (!attribute || !attribute.Value) {
+    if (!attribute || typeof attribute.Value === 'undefined' || attribute.Value === null) {
       return null;
     }
-    
-    const value = attribute.Value.Value;
-    if (typeof value === 'number') {
-      return value;
+  
+    const valueContainer = attribute.Value;
+    const actualValue = valueContainer.Value; // This is the actual data point value
+  
+    // Check for PI Point error states, where Value itself might be an object
+    if (typeof actualValue === 'object' && actualValue !== null) {
+      // Example: { Name: "Pt Created", Value: null, IsSystem: true, ... }
+      // Or { Name: "Calc Failed", Value: null, IsSystem: true, ... }
+      // If 'actualValue.Value' (nested) exists and is numeric/string, try to parse it
+      const nestedValue = (actualValue as any).Value;
+      if (typeof nestedValue === 'number') {
+        return isNaN(nestedValue) ? null : nestedValue;
+      }
+      if (typeof nestedValue === 'string') {
+        const parsedNested = parseFloat(nestedValue);
+        return isNaN(parsedNested) ? null : parsedNested;
+      }
+      // If the object indicates an error and has no usable numeric value
+      console.warn(`Attribute "${attribute.Name}" has complex object value, possibly error state:`, actualValue);
+      return null; 
+    }
+  
+    if (typeof actualValue === 'number') {
+      return isNaN(actualValue) ? null : actualValue;
     }
     
-    if (typeof value === 'string') {
-      const parsed = parseFloat(value);
-      return isNaN(parsed) ? null : parsed;
+    if (typeof actualValue === 'string') {
+      // Attempt to parse, but be wary of non-numeric strings
+      if (actualValue.trim() === '') return null; // Empty string is not a number
+      const parsed = parseFloat(actualValue);
+      // Check if parsing resulted in NaN, or if the string might represent a digital state
+      if (isNaN(parsed)) {
+         // console.log(`Attribute "${attribute.Name}" string value "${actualValue}" is not a number.`);
+         return null; // Or handle digital states if necessary
+      }
+      return parsed;
     }
     
+    // console.log(`Attribute "${attribute.Name}" value type ${typeof actualValue} not handled for numeric conversion.`);
     return null;
   }
 
