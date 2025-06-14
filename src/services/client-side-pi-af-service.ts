@@ -602,12 +602,12 @@ export class ClientSidePIAFService {
       console.log(`   Attribute "${attributeNameForLog}" has complex object value (Name: ${nestedName}). Attempting to find nested Value.`);
       if (typeof nestedValue === 'number') {
         console.log(`     Found nested numeric value for "${attributeNameForLog}": ${nestedValue}`);
-        return isNaN(nestedValue) ? null : nestedValue;
+        return isNaN(nestedValue) ? null : Math.round(nestedValue);
       }
       if (typeof nestedValue === 'string') {
         const parsedNested = parseFloat(nestedValue);
         console.log(`     Found nested string value "${nestedValue}" for "${attributeNameForLog}", parsed to: ${parsedNested}`);
-        return isNaN(parsedNested) ? null : parsedNested;
+        return isNaN(parsedNested) ? null : Math.round(parsedNested);
       }
       console.warn(`     Complex object for "${attributeNameForLog}" does not contain a usable nested numeric Value. Name: ${nestedName}, Value: ${nestedValue}. Returning null.`);
       return null; 
@@ -615,7 +615,7 @@ export class ClientSidePIAFService {
   
     if (typeof actualValue === 'number') {
       console.log(`   Value for "${attributeNameForLog}" is already a number: ${actualValue}.`);
-      return isNaN(actualValue) ? null : actualValue;
+      return isNaN(actualValue) ? null : Math.round(actualValue);
     }
     
     if (typeof actualValue === 'string') {
@@ -629,7 +629,7 @@ export class ClientSidePIAFService {
          console.log(`     String value "${actualValue}" for "${attributeNameForLog}" is not a number (NaN). Returning null.`);
          return null;
       }
-      return parsed;
+      return Math.round(parsed);
     }
     
     console.log(`   Value for "${attributeNameForLog}" (type ${typeof actualValue}, value ${JSON.stringify(actualValue)}) is not a number, string, or recognized object. Returning null.`);
